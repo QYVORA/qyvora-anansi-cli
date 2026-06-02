@@ -1,6 +1,13 @@
+// Package discovery contains subdomain enumeration logic.
+// This file defines the built-in wordlists used for DNS brute-force attacks.
 package discovery
 
-// DefaultWordlist is used for standard scans (~100 entries)
+// DefaultWordlist is used for standard scans (~100 entries).
+// These are common subdomain names based on:
+// - Infrastructure (api, cdn, mail, ftp, vpn)
+// - Environments (dev, staging, test, prod)
+// - Services (admin, portal, dashboard, blog, shop)
+// - Technical (git, db, redis, elastic, metrics)
 var DefaultWordlist = []string{
 	"www", "mail", "smtp", "pop", "imap", "ftp", "sftp",
 	"api", "api2", "api-v2", "rest", "graphql", "grpc",
@@ -26,7 +33,9 @@ var DefaultWordlist = []string{
 	"crm", "erp", "jira", "confluence", "slack",
 }
 
-// DeepWordlist extends DefaultWordlist for --deep scans
+// DeepWordlist extends DefaultWordlist for --deep scans (~200 entries total).
+// Adds more variations and less common subdomains. This increases scan time
+// but may discover hidden infrastructure.
 var DeepWordlist = append(DefaultWordlist, []string{
 	"api3", "api4", "api-dev", "api-staging", "api-prod",
 	"app1", "app2", "app3", "web", "web1", "web2",
