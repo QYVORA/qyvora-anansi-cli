@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/hsociety/anansi-cli/internal/discovery"
-	"github.com/hsociety/anansi-cli/internal/headers"
-	"github.com/hsociety/anansi-cli/internal/output"
-	"github.com/hsociety/anansi-cli/internal/paths"
-	"github.com/hsociety/anansi-cli/internal/probe"
-	"github.com/hsociety/anansi-cli/internal/takeover"
-	"github.com/hsociety/anansi-cli/internal/tls"
+	"github.com/wsuits6/hsociety-anansi-cli/internal/discovery"
+	"github.com/wsuits6/hsociety-anansi-cli/internal/headers"
+	"github.com/wsuits6/hsociety-anansi-cli/internal/output"
+	"github.com/wsuits6/hsociety-anansi-cli/internal/paths"
+	"github.com/wsuits6/hsociety-anansi-cli/internal/probe"
+	"github.com/wsuits6/hsociety-anansi-cli/internal/takeover"
+	"github.com/wsuits6/hsociety-anansi-cli/internal/tls"
 	"github.com/spf13/cobra"
 )
 
@@ -38,7 +38,7 @@ var rootCmd = &cobra.Command{
   ╚═══════════════════════════════════════════════╝`) + `
 
   Attack Surface Intelligence Engine — HSOCIETY OFFSEC
-  github.com/hsociety/anansi-cli
+  github.com/wsuits6/hsociety-anansi-cli
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: runScan,

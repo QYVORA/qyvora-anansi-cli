@@ -42,7 +42,7 @@ func (r *Renderer) Banner(target string) {
 	cyan.Printf("  │  TIME    ")
 	dim.Printf("%-47s", time.Now().UTC().Format("2006-01-02 15:04:05 UTC"))
 	cyan.Println("│")
-	cyan.Println("  │  BY      HSOCIETY OFFSEC // github.com/hsociety/anansi   │")
+	cyan.Println("  │  BY      HSOCIETY OFFSEC // github.com/wsuits6/hsociety-anansi-cli   │")
 	cyan.Println("  └─────────────────────────────────────────────────────────┘")
 	fmt.Println()
 }

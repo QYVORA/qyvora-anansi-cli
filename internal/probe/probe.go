@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hsociety/anansi-cli/internal/output"
+	"github.com/wsuits6/hsociety-anansi-cli/internal/output"
 )
 
 var techHeaders = []string{
@@ -38,7 +38,7 @@ func probeURL(client *http.Client, url string) *output.ProbeResult {
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ANANSI-CLI/1.0; +https://github.com/hsociety/anansi-cli)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ANANSI-CLI/1.0; +https://github.com/wsuits6/hsociety-anansi-cli)")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
 
 	start := time.Now()

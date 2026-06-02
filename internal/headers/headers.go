@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hsociety/anansi-cli/internal/output"
+	"github.com/wsuits6/hsociety-anansi-cli/internal/output"
 )
 
 var securityHeaders = []string{

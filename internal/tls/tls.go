@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hsociety/anansi-cli/internal/output"
+	"github.com/wsuits6/hsociety-anansi-cli/internal/output"
 )
 
 func probeHost(hostname string, timeout int) (*output.TLSResult, error) {

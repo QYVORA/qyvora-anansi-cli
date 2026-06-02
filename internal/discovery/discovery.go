@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hsociety/anansi-cli/internal/output"
+	"github.com/wsuits6/hsociety-anansi-cli/internal/output"
 )
 
 type crtEntry struct {
@@ -27,7 +27,7 @@ func fetchCrtSh(target string, timeout int) ([]string, error) {
 
 	var entries []crtEntry
 	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("json decode error: %w", err)
 	}
 
 	seen := map[string]struct{}{}
