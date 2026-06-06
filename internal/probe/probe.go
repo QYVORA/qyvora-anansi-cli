@@ -110,13 +110,12 @@ func probeHost(client *http.Client, fqdn string) *output.ProbeResult {
 	return &output.ProbeResult{FQDN: fqdn, IsAlive: false}
 }
 
-// Run probes all hosts concurrently with a semaphore limiting parallelism to 10.
-// This prevents overwhelming the network or triggering rate limits/WAFs.
-func Run(hosts []string, timeout int) ([]output.ProbeResult, error) {
+// Run probes all hosts concurrently with a semaphore limiting parallelism.
+func Run(hosts []string, timeout int, threads int) ([]output.ProbeResult, error) {
 	client := newClient(timeout)
 	results := make([]output.ProbeResult, 0, len(hosts))
 	mu := sync.Mutex{}
-	sem := make(chan struct{}, 10) // Max 10 concurrent probes
+	sem := make(chan struct{}, threads) // Use user-defined concurrency
 	var wg sync.WaitGroup
 
 	for _, host := range hosts {

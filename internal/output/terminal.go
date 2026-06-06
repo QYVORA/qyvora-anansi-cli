@@ -11,15 +11,15 @@ import (
 )
 
 var (
-	cyan      = color.New(color.FgCyan, color.Bold)
-	cyanDim   = color.New(color.FgCyan)
-	white     = color.New(color.FgWhite, color.Bold)
-	dim       = color.New(color.FgHiBlack)
-	red       = color.New(color.FgRed, color.Bold)
-	redDim    = color.New(color.FgRed)
-	orange    = color.New(color.FgYellow, color.Bold)
-	green     = color.New(color.FgGreen, color.Bold)
-	greenDim  = color.New(color.FgGreen)
+	cyan     = color.New(color.FgCyan, color.Bold)
+	cyanDim  = color.New(color.FgCyan)
+	white    = color.New(color.FgWhite, color.Bold)
+	dim      = color.New(color.FgHiBlack)
+	red      = color.New(color.FgRed, color.Bold)
+	redDim   = color.New(color.FgRed)
+	orange   = color.New(color.FgYellow, color.Bold)
+	green    = color.New(color.FgGreen, color.Bold)
+	greenDim = color.New(color.FgGreen)
 )
 
 type Renderer struct {
@@ -32,14 +32,10 @@ func New(format string) *Renderer {
 
 func (r *Renderer) Banner(target string) {
 	fmt.Println()
-	cyan.Println("  ╔════════════════════════════════════════════════════════╗")
-	cyan.Println("  ║   █████╗ ███╗   ██╗ █████╗ ███╗   ██╗███████╗██╗       ║")
-	cyan.Println("  ║  ██╔══██╗████╗  ██║██╔══██╗████╗  ██║██╔════╝██║       ║")
-	cyan.Println("  ║  ███████║██╔██╗ ██║███████║██╔██╗ ██║███████╗██║       ║")
-	cyan.Println("  ║  ██╔══██║██║╚██╗██║██╔══██║██║╚██╗██║╚════██║██║       ║")
-	cyan.Println("  ║  ██║  ██║██║ ╚████║██║  ██║██║ ╚████║███████║██║       ║")
-	cyan.Println("  ║  ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝╚═╝       ║")
-	cyan.Println("  ╚════════════════════════════════════════════════════════╝")
+	cyan.Println("     _   _  _   _   _  _   ___  _    ")
+	cyan.Println("    /_\\ | \\| | /_\\ | \\| | / __|| |   ")
+	cyan.Println("   / _ \\| .  |/ _ \\| .  | \\__ \\| |   ")
+	cyan.Println("  /_/ \\_\\_|\\_/_/ \\_\\_|\\_| |___/|_|   ")
 	fmt.Println()
 	white.Println("  Attack Surface Intelligence Engine")
 	cyan.Println("  HSOCIETY OFFSEC — github.com/wsuits6/hsociety-anansi-cli")

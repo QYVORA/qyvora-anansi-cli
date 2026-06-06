@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/spf13/cobra"
 	"github.com/wsuits6/hsociety-anansi-cli/internal/discovery"
 	"github.com/wsuits6/hsociety-anansi-cli/internal/headers"
 	"github.com/wsuits6/hsociety-anansi-cli/internal/output"
@@ -16,15 +17,16 @@ import (
 	"github.com/wsuits6/hsociety-anansi-cli/internal/probe"
 	"github.com/wsuits6/hsociety-anansi-cli/internal/takeover"
 	"github.com/wsuits6/hsociety-anansi-cli/internal/tls"
-	"github.com/spf13/cobra"
 )
 
 // Command-line flags that control scan behavior
 var (
-	flagDeep    bool          // If true, uses larger wordlists and more aggressive scanning
-	flagOut     string        // Output format: "terminal", "json", or "markdown"
-	flagTimeout int           // Per-request timeout in seconds (default: 5)
-	flagModules []string      // List of modules to run (e.g., ["discovery", "probe", "tls"])
+	flagDeep     bool     // If true, uses larger wordlists and more aggressive scanning
+	flagOut      string   // Output format: "terminal", "json", or "markdown"
+	flagTimeout  int      // Per-request timeout in seconds (default: 5)
+	flagModules  []string // List of modules to run (e.g., ["discovery", "probe", "tls"])
+	flagWordlist string   // Path to a custom subdomain wordlist
+	flagThreads  int      // Number of concurrent threads for scanning
 )
 
 // rootCmd is the main Cobra command that defines the CLI structure.
@@ -33,14 +35,11 @@ var rootCmd = &cobra.Command{
 	Use:   "anansi [target]",
 	Short: "ANANSI — Attack Surface Intelligence Engine",
 	Long: color.New(color.FgCyan, color.Bold).Sprint(`
-  ╔═══════════════════════════════════════════════╗
-  ║   █████╗ ███╗   ██╗ █████╗ ███╗   ██╗███████╗║
-  ║  ██╔══██╗████╗  ██║██╔══██╗████╗  ██║██╔════╝║
-  ║  ███████║██╔██╗ ██║███████║██╔██╗ ██║███████╗║
-  ║  ██╔══██║██║╚██╗██║██╔══██║██║╚██╗██║╚════██║║
-  ║  ██║  ██║██║ ╚████║██║  ██║██║ ╚████║███████║║
-  ║  ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝║
-  ╚═══════════════════════════════════════════════╝`) + `
+  
+    /_\ | \| | /_\ | \| |/ __|| |
+   / _ \| .  |/ _ \| .  |\__ \| | 
+  /_/ \_\_|\_/_/ \_\_|\_||___/|_|
+                                  `) + `
 
   Attack Surface Intelligence Engine — HSOCIETY OFFSEC
   github.com/wsuits6/hsociety-anansi-cli
@@ -63,6 +62,8 @@ func init() {
 	rootCmd.Flags().StringVar(&flagOut, "out", "terminal", "Output format: terminal | json | markdown")
 	rootCmd.Flags().IntVar(&flagTimeout, "timeout", 5, "Per-request timeout in seconds")
 	rootCmd.Flags().StringSliceVar(&flagModules, "modules", []string{"discovery", "probe", "tls", "headers", "paths", "takeover"}, "Modules to run (comma-separated)")
+	rootCmd.Flags().StringVarP(&flagWordlist, "wordlist", "w", "", "Path to custom subdomain wordlist")
+	rootCmd.Flags().IntVarP(&flagThreads, "threads", "t", 50, "Number of concurrent threads")
 }
 
 // hasModule checks if a given module name is in the user's --modules flag.
@@ -104,7 +105,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	// Finds subdomains using Certificate Transparency logs (crt.sh) and DNS brute-force
 	if hasModule("discovery") {
 		out.PhaseHeader("01", "DISCOVERY", "subdomain enumeration + DNS resolution")
-		subdomains, err := discovery.Run(target, flagDeep, flagTimeout)
+		subdomains, err := discovery.Run(target, flagDeep, flagTimeout, flagWordlist, flagThreads)
 		if err != nil {
 			out.PhaseError("DISCOVERY", err)
 		} else {
@@ -118,7 +119,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	if hasModule("probe") && len(report.Subdomains) > 0 {
 		out.PhaseHeader("02", "PROBE", "HTTP/HTTPS surface mapping")
 		hosts := discovery.LiveHosts(report.Subdomains) // Only probe hosts that resolved to IPs
-		probeResults, err := probe.Run(hosts, flagTimeout)
+		probeResults, err := probe.Run(hosts, flagTimeout, flagThreads)
 		if err != nil {
 			out.PhaseError("PROBE", err)
 		} else {
@@ -168,7 +169,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	if hasModule("paths") && len(report.ProbeResults) > 0 {
 		out.PhaseHeader("05", "PATHS", "exposed endpoint + file detection")
 		liveHosts := probe.LiveOnly(report.ProbeResults)
-		pathFindings := paths.Run(liveHosts, flagDeep, flagTimeout)
+		pathFindings := paths.Run(liveHosts, flagDeep, flagTimeout, flagThreads)
 		report.Findings = append(report.Findings, pathFindings...)
 		out.FindingsBlock("PATHS", pathFindings)
 	}
@@ -178,7 +179,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	// unclaimed third-party services (GitHub Pages, Heroku, AWS S3, etc.)
 	if hasModule("takeover") && len(report.Subdomains) > 0 {
 		out.PhaseHeader("06", "TAKEOVER", "dangling CNAME subdomain takeover detection")
-		takeoverFindings := takeover.Run(report.Subdomains, flagTimeout)
+		takeoverFindings := takeover.Run(report.Subdomains, flagTimeout, flagThreads)
 		report.Findings = append(report.Findings, takeoverFindings...)
 		out.FindingsBlock("TAKEOVER", takeoverFindings)
 	}

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/wsuits6/hsociety-anansi-cli/internal/assets"
 	"github.com/wsuits6/hsociety-anansi-cli/internal/output"
 )
 
@@ -93,15 +94,12 @@ func resolveHost(fqdn string) ([]string, []string) {
 // 2. Generate candidates from wordlist (default or deep)
 // 3. Resolve all candidates concurrently via DNS
 // 4. Return results with resolution status and any dead CNAMEs
-func Run(target string, deep bool, timeout int) ([]output.SubdomainResult, error) {
+func Run(target string, deep bool, timeout int, customWordlist string, threads int) ([]output.SubdomainResult, error) {
 	// Fetch subdomains from Certificate Transparency logs
 	crtDomains, _ := fetchCrtSh(target, timeout)
 
-	// Select wordlist based on scan depth
-	wordlist := DefaultWordlist
-	if deep {
-		wordlist = DeepWordlist // Contains ~200 entries instead of ~100
-	}
+	// Load wordlist (from file or embedded)
+	wordlist := assets.LoadWordlist(customWordlist, deep)
 
 	// Build master candidate list: combine crt.sh results with wordlist guesses
 	// We track the source of each subdomain for reporting purposes
@@ -134,7 +132,7 @@ func Run(target string, deep bool, timeout int) ([]output.SubdomainResult, error
 	// Resolve all candidates concurrently with a semaphore to limit parallelism
 	results := make([]output.SubdomainResult, 0, len(jobs))
 	mu := sync.Mutex{}
-	sem := make(chan struct{}, 20) // max 20 concurrent DNS lookups at once
+	sem := make(chan struct{}, threads) // Use user-defined concurrency
 	var wg sync.WaitGroup
 
 	for _, j := range jobs {

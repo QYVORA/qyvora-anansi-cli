@@ -128,7 +128,7 @@ func checkPath(client *http.Client, baseURL string, rule pathRule) *output.Findi
 }
 
 // Run probes all live hosts for exposed paths
-func Run(liveHosts []output.ProbeResult, deep bool, timeout int) []output.Finding {
+func Run(liveHosts []output.ProbeResult, deep bool, timeout int, threads int) []output.Finding {
 	client := &http.Client{
 		Timeout: time.Duration(timeout) * time.Second,
 		Transport: &http.Transport{
@@ -147,7 +147,7 @@ func Run(liveHosts []output.ProbeResult, deep bool, timeout int) []output.Findin
 
 	var allFindings []output.Finding
 	mu := sync.Mutex{}
-	sem := make(chan struct{}, 8)
+	sem := make(chan struct{}, threads) // Use user-defined concurrency
 	var wg sync.WaitGroup
 
 	for _, host := range liveHosts {

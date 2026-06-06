@@ -87,7 +87,7 @@ func resolveCNAMEs(fqdn string) []string {
 }
 
 // Run checks all dead subdomains for takeover candidates
-func Run(subdomains []output.SubdomainResult, timeout int) []output.Finding {
+func Run(subdomains []output.SubdomainResult, timeout int, threads int) []output.Finding {
 	client := &http.Client{
 		Timeout: time.Duration(timeout) * time.Second,
 		Transport: &http.Transport{
@@ -101,7 +101,7 @@ func Run(subdomains []output.SubdomainResult, timeout int) []output.Finding {
 
 	var findings []output.Finding
 	mu := sync.Mutex{}
-	sem := make(chan struct{}, 10)
+	sem := make(chan struct{}, threads) // Use user-defined concurrency
 	var wg sync.WaitGroup
 
 	for _, s := range subdomains {
