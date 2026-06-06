@@ -34,12 +34,7 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "anansi [target]",
 	Short: "ANANSI — Attack Surface Intelligence Engine",
-	Long: color.New(color.FgCyan, color.Bold).Sprint(`
-	 _   _  _   _   _  _  ___  _ 
-    /_\ | \| | /_\ | \| |/ __|| |
-   / _ \| .  |/ _ \| .  |\__ \| | 
-  /_/ \_\_|\_/_/ \_\_|\_||___/|_|
-                                  `) + `
+	Long: color.New(color.FgCyan, color.Bold).Sprint(output.AnansiASCIIArt) + `
 
   Attack Surface Intelligence Engine — HSOCIETY OFFSEC
   github.com/wsuits6/hsociety-anansi-cli

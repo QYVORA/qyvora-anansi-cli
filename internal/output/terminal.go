@@ -32,10 +32,10 @@ func New(format string) *Renderer {
 
 func (r *Renderer) Banner(target string) {
 	fmt.Println()
-	cyan.Println("     _   _  _   _   _  _   ___  _    ")
-	cyan.Println("    /_\\ | \\| | /_\\ | \\| | / __|| |   ")
-	cyan.Println("   / _ \\| .  |/ _ \\| .  | \\__ \\| |   ")
-	cyan.Println("  /_/ \\_\\_|\\_/_/ \\_\\_|\\_| |___/|_|   ")
+	for _, line := range strings.Split(AnansiASCIIArt, "\n") {
+		cyan.Println(line)
+	}
+	fmt.Println()
 	fmt.Println()
 	white.Println("  Attack Surface Intelligence Engine")
 	cyan.Println("  HSOCIETY OFFSEC — github.com/wsuits6/hsociety-anansi-cli")
