@@ -6,43 +6,37 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wsuits6/hsociety-anansi-cli/internal/output"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/assets"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/output"
 )
 
-var securityHeaders = []string{
-	"strict-transport-security",
-	"content-security-policy",
-	"x-frame-options",
-	"x-content-type-options",
-	"referrer-policy",
-	"permissions-policy",
-}
-
-var headerRules = []struct {
+type headerRule struct {
 	header      string
 	title       string
 	severity    string
 	description string
 	remediation string
-}{
-	{"strict-transport-security", "Missing HSTS", output.High,
-		"Absence of HSTS exposes users to SSL stripping attacks.",
-		"Add: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload"},
-	{"content-security-policy", "Missing Content-Security-Policy", output.Medium,
-		"No CSP defined — XSS and data injection attacks not mitigated.",
-		"Define a Content-Security-Policy header appropriate for your application."},
-	{"x-frame-options", "Missing X-Frame-Options", output.Medium,
-		"Page can be embedded in iframes — clickjacking risk.",
-		"Add: X-Frame-Options: DENY"},
-	{"x-content-type-options", "Missing X-Content-Type-Options", output.Low,
-		"Browser MIME sniffing may enable content injection.",
-		"Add: X-Content-Type-Options: nosniff"},
-	{"referrer-policy", "Missing Referrer-Policy", output.Low,
-		"Sensitive URL data may leak via the Referer header.",
-		"Add: Referrer-Policy: strict-origin-when-cross-origin"},
-	{"permissions-policy", "Missing Permissions-Policy", output.Low,
-		"Browser APIs (camera, mic, geolocation) are unrestricted.",
-		"Add a Permissions-Policy header to restrict unnecessary APIs."},
+}
+
+var securityHeaders []string
+var headerRules []headerRule
+
+func init() {
+	lines := assets.LoadData("wordlists/headers/rules.txt")
+	for _, line := range lines {
+		parts := strings.Split(line, "|")
+		if len(parts) == 5 {
+			rule := headerRule{
+				header:      parts[0],
+				title:       parts[1],
+				severity:    parts[2],
+				description: parts[3],
+				remediation: parts[4],
+			}
+			headerRules = append(headerRules, rule)
+			securityHeaders = append(securityHeaders, rule.header)
+		}
+	}
 }
 
 func auditURL(url string, timeout int) *output.HeaderResult {

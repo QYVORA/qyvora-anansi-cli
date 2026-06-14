@@ -9,7 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wsuits6/hsociety-anansi-cli/internal/output"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/assets"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/output"
 )
 
 type serviceFingerprint struct {
@@ -18,24 +19,20 @@ type serviceFingerprint struct {
 	bodyMatch   string
 }
 
-var fingerprints = []serviceFingerprint{
-	{"GitHub Pages", "github.io", "There isn't a GitHub Pages site here"},
-	{"Heroku", "herokuapp.com", "No such app"},
-	{"Fastly", "fastly.net", "Fastly error: unknown domain"},
-	{"AWS S3", "s3.amazonaws.com", "NoSuchBucket"},
-	{"AWS CloudFront", "cloudfront.net", "The request could not be satisfied"},
-	{"Netlify", "netlify.app", "Not Found - Request ID"},
-	{"Vercel", "vercel.app", "The deployment could not be found"},
-	{"Surge.sh", "surge.sh", "project not found"},
-	{"Ghost", "ghost.io", "Failed to resolve DNS"},
-	{"Pantheon", "pantheonsite.io", "404 error unknown site"},
-	{"Azure", "azurewebsites.net", "Error 404 - Web app not found"},
-	{"Shopify", "myshopify.com", "Sorry, this shop is currently unavailable"},
-	{"Tumblr", "tumblr.com", "There's nothing here"},
-	{"WordPress.com", "wordpress.com", "Do you want to register"},
-	{"Zendesk", "zendesk.com", "Help Center Closed"},
-	{"ReadMe.io", "readme.io", "Project doesnt exist"},
-	{"Fly.io", "fly.dev", "404 Not Found"},
+var fingerprints []serviceFingerprint
+
+func init() {
+	lines := assets.LoadData("wordlists/takeover/fingerprints.txt")
+	for _, line := range lines {
+		parts := strings.Split(line, "|")
+		if len(parts) == 3 {
+			fingerprints = append(fingerprints, serviceFingerprint{
+				name:        parts[0],
+				cnameSuffix: parts[1],
+				bodyMatch:   parts[2],
+			})
+		}
+	}
 }
 
 func checkTakeover(client *http.Client, subdomain string, deadCNAMEs []string) *output.Finding {
@@ -87,7 +84,7 @@ func resolveCNAMEs(fqdn string) []string {
 }
 
 // Run checks all dead subdomains for takeover candidates
-func Run(subdomains []output.SubdomainResult, timeout int, threads int) []output.Finding {
+func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int, threads int) []output.Finding {
 	client := &http.Client{
 		Timeout: time.Duration(timeout) * time.Second,
 		Transport: &http.Transport{
@@ -99,15 +96,24 @@ func Run(subdomains []output.SubdomainResult, timeout int, threads int) []output
 		},
 	}
 
+	var candidates []output.SubdomainResult
+	for _, s := range subdomains {
+		if !s.Resolved {
+			candidates = append(candidates, s)
+		}
+	}
+
+	if len(candidates) == 0 {
+		return nil
+	}
+
 	var findings []output.Finding
 	mu := sync.Mutex{}
 	sem := make(chan struct{}, threads) // Use user-defined concurrency
 	var wg sync.WaitGroup
 
-	for _, s := range subdomains {
-		if s.Resolved {
-			continue // alive — skip
-		}
+	completed := 0
+	for _, s := range candidates {
 		wg.Add(1)
 		sem <- struct{}{}
 		go func(sub output.SubdomainResult) {
@@ -120,6 +126,10 @@ func Run(subdomains []output.SubdomainResult, timeout int, threads int) []output
 				deadCNAMEs = resolveCNAMEs(sub.FQDN)
 			}
 			if len(deadCNAMEs) == 0 {
+				mu.Lock()
+				completed++
+				out.Progress(completed, len(candidates), "Takeover check")
+				mu.Unlock()
 				return
 			}
 
@@ -128,6 +138,10 @@ func Run(subdomains []output.SubdomainResult, timeout int, threads int) []output
 				findings = append(findings, *f)
 				mu.Unlock()
 			}
+			mu.Lock()
+			completed++
+			out.Progress(completed, len(candidates), "Takeover check")
+			mu.Unlock()
 		}(s)
 	}
 	wg.Wait()

@@ -1,0 +1,23 @@
+/.htpasswd|Exposed .htpasswd|CRITICAL|true
+/.htaccess|Exposed .htaccess|HIGH|true
+/id_rsa|Exposed SSH Private Key|CRITICAL|true
+/id_rsa.pub|Exposed SSH Public Key|MEDIUM|true
+/.ssh/id_rsa|Exposed SSH Key (/.ssh)|CRITICAL|true
+/private.key|Exposed Private Key|CRITICAL|true
+/server.key|Exposed Server Key|CRITICAL|true
+/sftp-config.json|Exposed SFTP Config|CRITICAL|true
+/.npmrc|Exposed .npmrc|HIGH|true
+/.dockerenv|Docker Environment Detected|MEDIUM|false
+/Dockerfile|Dockerfile Exposed|MEDIUM|true
+/docker-compose.yml|Docker Compose Exposed|HIGH|true
+/Makefile|Makefile Exposed|LOW|false
+/package.json|package.json Exposed|LOW|true
+/composer.json|composer.json Exposed|LOW|true
+/Gemfile|Gemfile Exposed|LOW|false
+/requirements.txt|requirements.txt Exposed|LOW|false
+/web.config|web.config Exposed|HIGH|true
+/applicationHost.config|IIS Config Exposed|HIGH|true
+/crossdomain.xml|crossdomain.xml Present|MEDIUM|true
+/clientaccesspolicy.xml|clientaccesspolicy.xml Present|MEDIUM|false
+/trace.axd|ASP.NET Trace Exposed|HIGH|false
+/elmah.axd|ELMAH Error Log Exposed|CRITICAL|true

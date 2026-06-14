@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wsuits6/hsociety-anansi-cli/internal/assets"
-	"github.com/wsuits6/hsociety-anansi-cli/internal/output"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/assets"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/output"
 )
 
 // crtEntry represents a single entry from the crt.sh JSON API response.
@@ -89,14 +89,34 @@ func resolveHost(fqdn string) ([]string, []string) {
 	return publicIPs, nil
 }
 
+// detectWildcard checks if a domain has a wildcard DNS record by probing
+// a random, non-existent subdomain. Returns the IPs it resolves to, if any.
+func detectWildcard(target string) []string {
+	randomSub := fmt.Sprintf("anansi-wildcard-test-%d.%s", time.Now().UnixNano(), target)
+	ips, _ := net.LookupHost(randomSub)
+	return ips
+}
+
 // Run executes the full subdomain discovery process:
 // 1. Fetch subdomains from crt.sh Certificate Transparency logs
 // 2. Generate candidates from wordlist (default or deep)
 // 3. Resolve all candidates concurrently via DNS
 // 4. Return results with resolution status and any dead CNAMEs
-func Run(target string, deep bool, timeout int, customWordlist string, threads int) ([]output.SubdomainResult, error) {
+func Run(out *output.Renderer, target string, deep bool, timeout int, customWordlist string, threads int) ([]output.SubdomainResult, error) {
+	// Detect wildcard DNS
+	out.Info("Detecting DNS wildcard...")
+	wildcardIPs := detectWildcard(target)
+	isWildcard := len(wildcardIPs) > 0
+	wildcardMap := make(map[string]struct{})
+	for _, ip := range wildcardIPs {
+		wildcardMap[ip] = struct{}{}
+		out.Info(fmt.Sprintf("Wildcard detected resolving to %s", ip))
+	}
+
 	// Fetch subdomains from Certificate Transparency logs
+	out.Info("Querying crt.sh (Certificate Transparency)...")
 	crtDomains, _ := fetchCrtSh(target, timeout)
+	out.Info(fmt.Sprintf("crt.sh found %d potential subdomains", len(crtDomains)))
 
 	// Load wordlist (from file or embedded)
 	wordlist := assets.LoadWordlist(customWordlist, deep)
@@ -129,12 +149,15 @@ func Run(target string, deep bool, timeout int, customWordlist string, threads i
 		jobs = append(jobs, job{fqdn, src})
 	}
 
+	out.Info(fmt.Sprintf("Resolving %d candidates with %d threads...", len(jobs), threads))
+
 	// Resolve all candidates concurrently with a semaphore to limit parallelism
 	results := make([]output.SubdomainResult, 0, len(jobs))
 	mu := sync.Mutex{}
 	sem := make(chan struct{}, threads) // Use user-defined concurrency
 	var wg sync.WaitGroup
 
+	completed := 0
 	for _, j := range jobs {
 		wg.Add(1)
 		sem <- struct{}{} // Acquire semaphore slot
@@ -143,6 +166,22 @@ func Run(target string, deep bool, timeout int, customWordlist string, threads i
 			defer func() { <-sem }() // Release semaphore slot
 
 			ips, deadCNAMEs := resolveHost(j.fqdn)
+
+			// If wildcard detected, filter out results that resolve to wildcard IPs
+			// unless the subdomain was found via crt.sh (more likely to be legitimate)
+			if isWildcard && j.source == "wordlist" && len(ips) > 0 {
+				isOnlyWildcard := true
+				for _, ip := range ips {
+					if _, ok := wildcardMap[ip]; !ok {
+						isOnlyWildcard = false
+						break
+					}
+				}
+				if isOnlyWildcard {
+					ips = nil // Treat as non-resolving
+				}
+			}
+
 			result := output.SubdomainResult{
 				FQDN:       j.fqdn,
 				Source:     j.source,
@@ -152,6 +191,10 @@ func Run(target string, deep bool, timeout int, customWordlist string, threads i
 			}
 			mu.Lock()
 			results = append(results, result)
+			completed++
+			if completed%10 == 0 || completed == len(jobs) {
+				out.Progress(completed, len(jobs), "Resolving")
+			}
 			mu.Unlock()
 		}(j)
 	}

@@ -7,41 +7,20 @@ import (
 	"strings"
 )
 
-//go:embed wordlists/subdomains/*.txt
+//go:embed wordlists/**/*.txt
 var EmbeddedAssets embed.FS
 
-// LoadWordlist attempts to load a wordlist from the given path.
-// If the path is empty, it checks for a local wordlists/ directory.
-// If that's missing, it falls back to the embedded defaults.
-func LoadWordlist(customPath string, deep bool) []string {
-	var data []byte
-	var err error
-
-	// 1. Try custom path if provided
-	if customPath != "" {
-		data, err = os.ReadFile(customPath)
-	}
-
-	// 2. If no custom path or failed to read, try local wordlists directory
-	if (err != nil || customPath == "") {
-		filename := "default.txt"
-		if deep {
-			filename = "deep.txt"
-		}
-		localPath := filepath.Join("wordlists", "subdomains", filename)
-		data, err = os.ReadFile(localPath)
-	}
-
-	// 3. Fallback to embedded defaults
+// LoadData reads a file from the given path, trying local first then embedded.
+func LoadData(path string) []string {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		filename := "wordlists/subdomains/default.txt"
-		if deep {
-			filename = "wordlists/subdomains/deep.txt"
-		}
-		data, _ = EmbeddedAssets.ReadFile(filename)
+		// Try to read from embedded if local failed.
+		// Use forward slashes for embedded assets.
+		embedPath := filepath.ToSlash(path)
+		data, err = EmbeddedAssets.ReadFile(embedPath)
 	}
 
-	if len(data) == 0 {
+	if err != nil {
 		return nil
 	}
 
@@ -54,4 +33,18 @@ func LoadWordlist(customPath string, deep bool) []string {
 		}
 	}
 	return result
+}
+
+// LoadWordlist attempts to load a subdomain wordlist.
+func LoadWordlist(customPath string, deep bool) []string {
+	if customPath != "" {
+		return LoadData(customPath)
+	}
+
+	filename := "default.txt"
+	if deep {
+		filename = "deep.txt"
+	}
+	
+	return LoadData(filepath.Join("wordlists", "subdomains", filename))
 }

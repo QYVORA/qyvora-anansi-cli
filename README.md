@@ -2,7 +2,7 @@
 
 **Attack Surface Intelligence Engine — Terminal Edition**
 
-Built by [HSOCIETY OFFSEC](https://hsociety.io) — an offensive security company operating out of Accra, Ghana.
+Built by [QYVORA OffSec](https://qyvora.netlify.app) — an offensive security company operating out of Accra, Ghana.
 
 ```
 anansi target.com
@@ -36,22 +36,22 @@ ANANSI CLI is a terminal-first attack surface recon tool for pentesters and bug 
 
 ```bash
 # Linux x86_64
-curl -L https://github.com/wsuits6/hsociety-anansi-cli/releases/latest/download/anansi-linux-amd64 -o anansi
+curl -L https://github.com/wsuits6/qyvora-anansi-cli/releases/latest/download/anansi-linux-amd64 -o anansi
 chmod +x anansi
 sudo mv anansi /usr/local/bin/
 
 # Linux arm64 (Raspberry Pi, etc.)
-curl -L https://github.com/wsuits6/hsociety-anansi-cli/releases/latest/download/anansi-linux-arm64 -o anansi
+curl -L https://github.com/wsuits6/qyvora-anansi-cli/releases/latest/download/anansi-linux-arm64 -o anansi
 chmod +x anansi
 sudo mv anansi /usr/local/bin/
 
 # macOS (Apple Silicon)
-curl -L https://github.com/wsuits6/hsociety-anansi-cli/releases/latest/download/anansi-macos-arm64 -o anansi
+curl -L https://github.com/wsuits6/qyvora-anansi-cli/releases/latest/download/anansi-macos-arm64 -o anansi
 chmod +x anansi
 sudo mv anansi /usr/local/bin/
 
 # macOS (Intel)
-curl -L https://github.com/wsuits6/hsociety-anansi-cli/releases/latest/download/anansi-macos-amd64 -o anansi
+curl -L https://github.com/wsuits6/qyvora-anansi-cli/releases/latest/download/anansi-macos-amd64 -o anansi
 chmod +x anansi
 sudo mv anansi /usr/local/bin/
 ```
@@ -60,8 +60,8 @@ sudo mv anansi /usr/local/bin/
 
 **Requirements:** Go 1.22+
 ```bash
-git clone https://github.com/wsuits6/hsociety-anansi-cli
-cd hsociety-anansi-cli
+git clone https://github.com/wsuits6/qyvora-anansi-cli
+cd qyvora-anansi-cli
 go mod tidy
 go build -o anansi .
 sudo mv anansi /usr/local/bin/
@@ -123,7 +123,7 @@ Terminal output built for operators. No bar charts, no letter grades:
   │  ANANSI  Attack Surface Intelligence Engine             │
   │  TARGET  target.com                                     │
   │  TIME    2025-06-01 14:22:01 UTC                        │
-  │  BY      HSOCIETY OFFSEC // github.com/wsuits6/hsociety-anansi-cli  │
+  │  BY      QYVORA OffSec // github.com/wsuits6/qyvora-anansi-cli  │
   └─────────────────────────────────────────────────────────┘
 
   ══ PHASE 01 ── DISCOVERY // subdomain enumeration + DNS resolution
@@ -198,13 +198,13 @@ anansi-cli/
 
 The pentesting and bug bounty community runs on Linux terminals. Tools should be single binaries that do one thing well and get out of the way. No web UI, no cloud account, no API key required.
 
-ANANSI CLI is the portable companion to [ANANSI](https://hsociety.io/anansi) — the API-powered attack surface intelligence service built into the HSOCIETY OFFSEC platform. Same detection logic. Same output philosophy. CLI is for your laptop. The API is for your pipeline.
+ANANSI CLI is the portable companion to [ANANSI](https://qyvora.io/anansi) — the API-powered attack surface intelligence service built into the QYVORA OffSec platform. Same detection logic. Same output philosophy. CLI is for your laptop. The API is for your pipeline.
 
 ---
 
 ## Legal
 
-Only scan targets you own or have explicit written authorization to test. Unauthorized scanning is illegal in most jurisdictions. HSOCIETY OFFSEC accepts no responsibility for misuse of this tool.
+Only scan targets you own or have explicit written authorization to test. Unauthorized scanning is illegal in most jurisdictions. QYVORA OffSec accepts no responsibility for misuse of this tool.
 
 ---
 
@@ -220,5 +220,5 @@ PRs welcome. Open an issue first for major changes. If you add a new path rule, 
 
 ---
 
-*HSOCIETY OFFSEC // Accra, Ghana*
+*QYVORA // Accra, Ghana*
 *Cybersecurity in Africa is booming. We are building the people behind it.*

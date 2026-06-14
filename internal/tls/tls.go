@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wsuits6/hsociety-anansi-cli/internal/output"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/output"
 )
 
 // probeHost establishes a TLS connection and extracts certificate details.

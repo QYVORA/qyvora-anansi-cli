@@ -10,15 +10,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wsuits6/hsociety-anansi-cli/internal/output"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/assets"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/output"
 )
 
 // techHeaders are HTTP headers that reveal information about the server technology stack.
 // These are collected and included in probe results for fingerprinting.
-var techHeaders = []string{
-	"server", "x-powered-by", "via", "x-generator",
-	"x-aspnet-version", "x-aspnetmvc-version",
-	"x-drupal-cache", "x-wp-total", "x-shopify-stage",
+var techHeaders []string
+
+func init() {
+	techHeaders = assets.LoadData("wordlists/probe/tech_headers.txt")
 }
 
 // newClient creates an HTTP client configured for security scanning:
@@ -50,7 +51,7 @@ func probeURL(client *http.Client, url string) *output.ProbeResult {
 		return nil
 	}
 	// Use a realistic User-Agent to avoid basic bot detection
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ANANSI-CLI/1.0; +https://github.com/wsuits6/hsociety-anansi-cli)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ANANSI-CLI/1.0; +https://github.com/wsuits6/qyvora-anansi-cli)")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
 
 	start := time.Now()
@@ -111,13 +112,14 @@ func probeHost(client *http.Client, fqdn string) *output.ProbeResult {
 }
 
 // Run probes all hosts concurrently with a semaphore limiting parallelism.
-func Run(hosts []string, timeout int, threads int) ([]output.ProbeResult, error) {
+func Run(out *output.Renderer, hosts []string, timeout int, threads int) ([]output.ProbeResult, error) {
 	client := newClient(timeout)
 	results := make([]output.ProbeResult, 0, len(hosts))
 	mu := sync.Mutex{}
 	sem := make(chan struct{}, threads) // Use user-defined concurrency
 	var wg sync.WaitGroup
 
+	completed := 0
 	for _, host := range hosts {
 		wg.Add(1)
 		sem <- struct{}{} // Acquire semaphore slot
@@ -127,6 +129,10 @@ func Run(hosts []string, timeout int, threads int) ([]output.ProbeResult, error)
 			r := probeHost(client, h)
 			mu.Lock()
 			results = append(results, *r)
+			completed++
+			if completed%5 == 0 || completed == len(hosts) {
+				out.Progress(completed, len(hosts), "Probing")
+			}
 			mu.Unlock()
 		}(host)
 	}

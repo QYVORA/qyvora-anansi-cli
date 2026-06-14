@@ -1,0 +1,9 @@
+server
+x-powered-by
+via
+x-generator
+x-aspnet-version
+x-aspnetmvc-version
+x-drupal-cache
+x-wp-total
+x-shopify-stage

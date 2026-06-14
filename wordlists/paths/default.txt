@@ -1,0 +1,35 @@
+/.env|Exposed .env File|CRITICAL|true
+/.env.local|Exposed .env.local|CRITICAL|true
+/.env.production|Exposed .env.production|CRITICAL|true
+/.env.development|Exposed .env.development|CRITICAL|true
+/.git/HEAD|Exposed Git Repository|CRITICAL|true
+/.git/config|Exposed Git Config|CRITICAL|true
+/wp-config.php|WordPress Config Exposed|CRITICAL|true
+/db.sql|Exposed SQL Dump|CRITICAL|true
+/dump.sql|Exposed SQL Dump|CRITICAL|true
+/backup.sql|Exposed SQL Dump|CRITICAL|true
+/phpmyadmin|Exposed phpMyAdmin|CRITICAL|false
+/pma|Exposed phpMyAdmin (pma)|CRITICAL|false
+/adminer.php|Exposed Adminer Interface|CRITICAL|false
+/actuator/env|Spring Actuator /env Exposed|CRITICAL|true
+/config.php|Exposed PHP Config|HIGH|true
+/config.yml|Exposed YAML Config|HIGH|true
+/config.json|Exposed JSON Config|HIGH|true
+/backup.zip|Exposed Backup Archive|HIGH|false
+/admin|Exposed Admin Panel|HIGH|false
+/administrator|Exposed Administrator Panel|HIGH|false
+/wp-admin|Exposed WordPress Admin|HIGH|false
+/server-status|Apache Server-Status Exposed|HIGH|true
+/actuator|Spring Boot Actuator Exposed|HIGH|false
+/actuator/health|Spring Boot Health Endpoint|INFO|false
+/wp-login.php|WordPress Login Exposed|MEDIUM|false
+/xmlrpc.php|WordPress XMLRPC Enabled|MEDIUM|false
+/.DS_Store|Exposed .DS_Store File|MEDIUM|false
+/swagger-ui.html|Swagger UI Exposed|MEDIUM|false
+/swagger-ui/index.html|Swagger UI Exposed|MEDIUM|false
+/api-docs|API Docs Exposed|MEDIUM|false
+/openapi.json|OpenAPI Spec Exposed|LOW|true
+/metrics|Metrics Endpoint Exposed|MEDIUM|false
+/graphql|GraphQL Endpoint Detected|INFO|false
+/robots.txt|robots.txt Present|INFO|false
+/sitemap.xml|Sitemap Present|INFO|false

@@ -1,0 +1,17 @@
+GitHub Pages|github.io|There isn't a GitHub Pages site here
+Heroku|herokuapp.com|No such app
+Fastly|fastly.net|Fastly error: unknown domain
+AWS S3|s3.amazonaws.com|NoSuchBucket
+AWS CloudFront|cloudfront.net|The request could not be satisfied
+Netlify|netlify.app|Not Found - Request ID
+Vercel|vercel.app|The deployment could not be found
+Surge.sh|surge.sh|project not found
+Ghost|ghost.io|Failed to resolve DNS
+Pantheon|pantheonsite.io|404 error unknown site
+Azure|azurewebsites.net|Error 404 - Web app not found
+Shopify|myshopify.com|Sorry, this shop is currently unavailable
+Tumblr|tumblr.com|There's nothing here
+WordPress.com|wordpress.com|Do you want to register
+Zendesk|zendesk.com|Help Center Closed
+ReadMe.io|readme.io|Project doesnt exist
+Fly.io|fly.dev|404 Not Found

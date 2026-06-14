@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/fatih/color"
@@ -38,7 +39,7 @@ func (r *Renderer) Banner(target string) {
 	fmt.Println()
 	fmt.Println()
 	white.Println("  Attack Surface Intelligence Engine")
-	cyan.Println("  HSOCIETY OFFSEC — github.com/wsuits6/hsociety-anansi-cli")
+	cyan.Println("  QYVORA OffSec — github.com/wsuits6/qyvora-anansi-cli")
 	fmt.Println()
 	dim.Printf("  TARGET: ")
 	white.Println(target)
@@ -60,6 +61,23 @@ func (r *Renderer) PhaseError(phase string, err error) {
 
 func (r *Renderer) Info(msg string) {
 	cyanDim.Printf("  [*] %s\n", msg)
+}
+
+func (r *Renderer) Progress(current, total int, label string) {
+	if r.format != "terminal" {
+		return
+	}
+	percent := float64(current) / float64(total) * 100
+	width := 30
+	completed := int(float64(width) * (float64(current) / float64(total)))
+	if completed > width {
+		completed = width
+	}
+	bar := strings.Repeat("█", completed) + strings.Repeat("░", width-completed)
+	fmt.Printf("\r  %s [%s] %3.0f%% (%d/%d)   ", dim.Sprint(label), cyan.Sprint(bar), percent, current, total)
+	if current == total {
+		fmt.Println()
+	}
 }
 
 func (r *Renderer) SubdomainTable(results []SubdomainResult) {
@@ -86,8 +104,9 @@ func (r *Renderer) SubdomainTable(results []SubdomainResult) {
 	cyan.Printf("crt.sh=%d  ", crtsh)
 	dim.Printf("wordlist=%d  san=%d\n\n", wordlist, san)
 
-	dim.Printf("  %-45s  %-16s  %-8s  %s\n", "SUBDOMAIN", "IP", "SOURCE", "STATUS")
-	dim.Println("  " + strings.Repeat("─", 85))
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	fmt.Fprint(w, dim.Sprint("  SUBDOMAIN\tIP\tSOURCE\tSTATUS\n"))
+	fmt.Fprint(w, dim.Sprint("  "+strings.Repeat("─", 40)+"\t"+strings.Repeat("─", 16)+"\t"+strings.Repeat("─", 8)+"\t"+strings.Repeat("─", 6)+"\n"))
 
 	for _, s := range results {
 		ip := "—"
@@ -96,25 +115,27 @@ func (r *Renderer) SubdomainTable(results []SubdomainResult) {
 		}
 
 		status := dim.Sprint("DEAD")
-		fqdnStr := dim.Sprint(fmt.Sprintf("  %-45s", s.FQDN))
+		fqdnStr := dim.Sprint(s.FQDN)
 		if s.Resolved {
 			status = green.Sprint("LIVE")
-			fqdnStr = fmt.Sprintf("  %-45s", s.FQDN)
+			fqdnStr = s.FQDN
 		}
 
 		sourceColor := dim.Sprint(s.Source)
 		if s.Source == "crtsh" {
-			sourceColor = cyanDim.Sprint("crt.sh  ")
+			sourceColor = cyanDim.Sprint("crt.sh")
 		} else if s.Source == "san" {
-			sourceColor = greenDim.Sprint("san     ")
+			sourceColor = greenDim.Sprint("san")
 		}
 
-		fmt.Printf("%s  %-16s  %s  %s\n", fqdnStr, ip, sourceColor, status)
+		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", fqdnStr, ip, sourceColor, status)
 
 		for _, cname := range s.DeadCNAMEs {
-			dim.Printf("  %-45s  CNAME → %s\n", "", cname)
+			fmt.Fprintf(w, "  \tCNAME → %s\t\t\n", dim.Sprint(cname))
 		}
 	}
+	w.Flush()
+	fmt.Println()
 }
 
 func (r *Renderer) ProbeTable(results []ProbeResult) {
@@ -125,8 +146,10 @@ func (r *Renderer) ProbeTable(results []ProbeResult) {
 		}
 	}
 	dim.Printf("  live: %d / %d\n\n", live, len(results))
-	dim.Printf("  %-45s  %-6s  %-25s  %s\n", "URL", "CODE", "SERVER", "TITLE")
-	dim.Println("  " + strings.Repeat("─", 95))
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	fmt.Fprint(w, dim.Sprint("  URL\tCODE\tSERVER\tTITLE\n"))
+	fmt.Fprint(w, dim.Sprint("  "+strings.Repeat("─", 45)+"\t"+strings.Repeat("─", 6)+"\t"+strings.Repeat("─", 20)+"\t"+strings.Repeat("─", 30)+"\n"))
 
 	for _, p := range results {
 		if !p.IsAlive {
@@ -152,11 +175,17 @@ func (r *Renderer) ProbeTable(results []ProbeResult) {
 			title = title[:37] + "..."
 		}
 
-		fmt.Printf("  %-45s  %s     %-25s  %s\n", p.URL, codeColor, server, dim.Sprint(title))
+		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", p.URL, codeColor, server, dim.Sprint(title))
 	}
+	w.Flush()
+	fmt.Println()
 }
 
 func (r *Renderer) TLSTable(results []TLSResult) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	fmt.Fprint(w, dim.Sprint("  HOSTNAME\tPROTO\tEXPIRY\tISSUER\n"))
+	fmt.Fprint(w, dim.Sprint("  "+strings.Repeat("─", 30)+"\t"+strings.Repeat("─", 8)+"\t"+strings.Repeat("─", 10)+"\t"+strings.Repeat("─", 20)+"\n"))
+
 	for _, t := range results {
 		expiryStr := fmt.Sprintf("%d days", t.DaysUntilExpiry)
 		expiryColor := greenDim.Sprint(expiryStr)
@@ -173,23 +202,19 @@ func (r *Renderer) TLSTable(results []TLSResult) {
 
 		selfSignedFlag := ""
 		if t.SelfSigned {
-			selfSignedFlag = red.Sprint(" [SELF-SIGNED]")
+			selfSignedFlag = red.Sprint(" [SELF]")
 		}
 
-		fmt.Printf("  %-40s  %s  %s  issuer=%s%s\n",
+		fmt.Fprintf(w, "  %s\t%s\t%s\t%s%s\n",
 			t.Hostname,
 			dim.Sprint(t.Protocol),
 			expiryColor,
 			dim.Sprint(issuer),
 			selfSignedFlag,
 		)
-
-		if len(t.SANs) > 0 && len(t.SANs) <= 6 {
-			dim.Printf("  %-40s  SANs: %s\n", "", strings.Join(t.SANs, ", "))
-		} else if len(t.SANs) > 6 {
-			dim.Printf("  %-40s  SANs: %s ... (+%d more)\n", "", strings.Join(t.SANs[:6], ", "), len(t.SANs)-6)
-		}
 	}
+	w.Flush()
+	fmt.Println()
 }
 
 func (r *Renderer) HeadersTable(results []HeaderResult) {
@@ -204,33 +229,34 @@ func (r *Renderer) HeadersTable(results []HeaderResult) {
 
 	shortNames := map[string]string{
 		"strict-transport-security": "HSTS",
-		"content-security-policy":   "CSP ",
-		"x-frame-options":           "XFO ",
+		"content-security-policy":   "CSP",
+		"x-frame-options":           "XFO",
 		"x-content-type-options":    "XCTO",
-		"referrer-policy":           "RP  ",
-		"permissions-policy":        "PP  ",
+		"referrer-policy":           "RP",
+		"permissions-policy":        "PP",
 	}
 
-	// Header row
-	fmt.Printf("  %-40s  ", "URL")
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "  %-35s\t", "URL")
 	for _, h := range secHeaders {
-		cyan.Printf("%s  ", shortNames[h])
+		fmt.Fprintf(w, "%s\t", cyan.Sprint(shortNames[h]))
 	}
-	fmt.Println()
-	dim.Println("  " + strings.Repeat("─", 80))
+	fmt.Fprintln(w)
 
 	for _, hr := range results {
-		fmt.Printf("  %-40s  ", hr.URL)
+		fmt.Fprintf(w, "  %-35s\t", hr.URL)
 		for _, h := range secHeaders {
 			val, exists := hr.Headers[h]
 			if exists && val != "" {
-				green.Printf("●     ")
+				fmt.Fprintf(w, "%s\t", green.Sprint("●"))
 			} else {
-				red.Printf("●     ")
+				fmt.Fprintf(w, "%s\t", red.Sprint("●"))
 			}
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
+	w.Flush()
+	fmt.Println()
 }
 
 func (r *Renderer) FindingsBlock(phase string, findings []Finding) {

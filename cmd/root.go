@@ -10,13 +10,13 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"github.com/wsuits6/hsociety-anansi-cli/internal/discovery"
-	"github.com/wsuits6/hsociety-anansi-cli/internal/headers"
-	"github.com/wsuits6/hsociety-anansi-cli/internal/output"
-	"github.com/wsuits6/hsociety-anansi-cli/internal/paths"
-	"github.com/wsuits6/hsociety-anansi-cli/internal/probe"
-	"github.com/wsuits6/hsociety-anansi-cli/internal/takeover"
-	"github.com/wsuits6/hsociety-anansi-cli/internal/tls"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/discovery"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/headers"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/output"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/paths"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/probe"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/takeover"
+	"github.com/wsuits6/qyvora-anansi-cli/internal/tls"
 )
 
 // Command-line flags that control scan behavior
@@ -36,8 +36,8 @@ var rootCmd = &cobra.Command{
 	Short: "ANANSI — Attack Surface Intelligence Engine",
 	Long: color.New(color.FgCyan, color.Bold).Sprint(output.AnansiASCIIArt) + `
 
-  Attack Surface Intelligence Engine — HSOCIETY OFFSEC
-  github.com/wsuits6/hsociety-anansi-cli
+  Attack Surface Intelligence Engine — QYVORA OffSec
+  github.com/wsuits6/qyvora-anansi-cli
 `,
 	Args: cobra.ExactArgs(1), // Requires exactly one argument: the target domain
 	RunE: runScan,            // The function that executes when the command is run
@@ -100,7 +100,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	// Finds subdomains using Certificate Transparency logs (crt.sh) and DNS brute-force
 	if hasModule("discovery") {
 		out.PhaseHeader("01", "DISCOVERY", "subdomain enumeration + DNS resolution")
-		subdomains, err := discovery.Run(target, flagDeep, flagTimeout, flagWordlist, flagThreads)
+		subdomains, err := discovery.Run(out, target, flagDeep, flagTimeout, flagWordlist, flagThreads)
 		if err != nil {
 			out.PhaseError("DISCOVERY", err)
 		} else {
@@ -114,7 +114,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	if hasModule("probe") && len(report.Subdomains) > 0 {
 		out.PhaseHeader("02", "PROBE", "HTTP/HTTPS surface mapping")
 		hosts := discovery.LiveHosts(report.Subdomains) // Only probe hosts that resolved to IPs
-		probeResults, err := probe.Run(hosts, flagTimeout, flagThreads)
+		probeResults, err := probe.Run(out, hosts, flagTimeout, flagThreads)
 		if err != nil {
 			out.PhaseError("PROBE", err)
 		} else {
@@ -164,7 +164,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	if hasModule("paths") && len(report.ProbeResults) > 0 {
 		out.PhaseHeader("05", "PATHS", "exposed endpoint + file detection")
 		liveHosts := probe.LiveOnly(report.ProbeResults)
-		pathFindings := paths.Run(liveHosts, flagDeep, flagTimeout, flagThreads)
+		pathFindings := paths.Run(out, liveHosts, flagDeep, flagTimeout, flagThreads)
 		report.Findings = append(report.Findings, pathFindings...)
 		out.FindingsBlock("PATHS", pathFindings)
 	}
@@ -174,7 +174,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	// unclaimed third-party services (GitHub Pages, Heroku, AWS S3, etc.)
 	if hasModule("takeover") && len(report.Subdomains) > 0 {
 		out.PhaseHeader("06", "TAKEOVER", "dangling CNAME subdomain takeover detection")
-		takeoverFindings := takeover.Run(report.Subdomains, flagTimeout, flagThreads)
+		takeoverFindings := takeover.Run(out, report.Subdomains, flagTimeout, flagThreads)
 		report.Findings = append(report.Findings, takeoverFindings...)
 		out.FindingsBlock("TAKEOVER", takeoverFindings)
 	}

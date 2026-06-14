@@ -1,4 +1,4 @@
-module github.com/wsuits6/hsociety-anansi-cli
+module github.com/wsuits6/qyvora-anansi-cli
 
 go 1.22
 
