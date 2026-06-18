@@ -44,33 +44,36 @@ type SubdomainResult struct {
 
 // ProbeResult is the HTTP probe result for a single host
 type ProbeResult struct {
-	FQDN          string
-	URL           string
-	FinalURL      string
-	StatusCode    int
-	Server        string
-	TechHeaders   map[string]string
-	Title         string
+	FQDN           string
+	URL            string
+	FinalURL       string
+	StatusCode     int
+	Server         string
+	TechHeaders    map[string]string
+	Technologies   []string
+	Title          string
 	ResponseTimeMs int64
-	IsAlive       bool
-	RedirectChain []string
+	IsAlive        bool
+	RedirectChain  []string
 }
 
 // TLSResult is certificate + protocol data for a single host
 type TLSResult struct {
-	Hostname       string
-	Protocol       string
-	Cipher         string
-	Issuer         string
-	Subject        string
-	ValidFrom      string
-	ValidTo        string
+	Hostname        string
+	Protocol        string
+	Cipher          string
+	Issuer          string
+	Subject         string
+	ValidFrom       string
+	ValidTo         string
 	DaysUntilExpiry int
-	Expired        bool
-	ExpiringSoon   bool
-	SelfSigned     bool
-	SANs           []string
-	Findings       []Finding
+	Expired         bool
+	ExpiringSoon    bool
+	SelfSigned      bool
+	SANs            []string
+	Findings        []Finding
+	Supported       bool   // True if TLS connection succeeded
+	Error           string // Error message if TLS connection failed
 }
 
 // HeaderResult is the security header audit for a single URL
@@ -79,4 +82,7 @@ type HeaderResult struct {
 	Headers  map[string]string // header name → value or "" if absent
 	CORS     string            // Access-Control-Allow-Origin value
 	Findings []Finding
+	Success  bool   // True if request succeeded
+	Error    string // Error message if request failed
 }
+

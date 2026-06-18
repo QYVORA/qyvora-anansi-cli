@@ -2,6 +2,7 @@ package takeover
 
 import (
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -84,7 +85,7 @@ func resolveCNAMEs(fqdn string) []string {
 }
 
 // Run checks all dead subdomains for takeover candidates
-func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int, threads int) []output.Finding {
+func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int, threads int, delayMs int) []output.Finding {
 	client := &http.Client{
 		Timeout: time.Duration(timeout) * time.Second,
 		Transport: &http.Transport{
@@ -99,7 +100,12 @@ func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int,
 	var candidates []output.SubdomainResult
 	for _, s := range subdomains {
 		if !s.Resolved {
-			candidates = append(candidates, s)
+			// Only check subdomains that resolved to dead CNAMEs or came from SAN discovery
+			if len(s.DeadCNAMEs) > 0 || s.Source == "san" {
+				candidates = append(candidates, s)
+			} else {
+				out.Verbose(fmt.Sprintf("Subdomain skipped for takeover (no dead CNAME): %s", s.FQDN))
+			}
 		}
 	}
 
@@ -120,12 +126,17 @@ func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int,
 			defer wg.Done()
 			defer func() { <-sem }()
 
+			if delayMs > 0 {
+				time.Sleep(time.Duration(delayMs) * time.Millisecond)
+			}
+
 			// Use stored dead CNAMEs if available, otherwise resolve now
 			deadCNAMEs := sub.DeadCNAMEs
 			if len(deadCNAMEs) == 0 {
 				deadCNAMEs = resolveCNAMEs(sub.FQDN)
 			}
 			if len(deadCNAMEs) == 0 {
+				out.Verbose(fmt.Sprintf("Subdomain has no dead CNAMEs: %s", sub.FQDN))
 				mu.Lock()
 				completed++
 				out.Progress(completed, len(candidates), "Takeover check")
@@ -137,6 +148,8 @@ func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int,
 				mu.Lock()
 				findings = append(findings, *f)
 				mu.Unlock()
+			} else {
+				out.Verbose(fmt.Sprintf("Subdomain not vulnerable to takeover: %s (%s)", sub.FQDN, strings.Join(deadCNAMEs, ", ")))
 			}
 			mu.Lock()
 			completed++

@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wsuits6/qyvora-anansi-cli/internal/assets"
@@ -50,14 +51,22 @@ func auditURL(url string, timeout int) *output.HeaderResult {
 	// CORS check — inject evil origin
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil
+		return &output.HeaderResult{
+			URL:     url,
+			Success: false,
+			Error:   err.Error(),
+		}
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ANANSI-CLI/1.0)")
 	req.Header.Set("Origin", "https://evil-attacker.com")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil
+		return &output.HeaderResult{
+			URL:     url,
+			Success: false,
+			Error:   err.Error(),
+		}
 	}
 	defer resp.Body.Close()
 
@@ -74,6 +83,7 @@ func auditURL(url string, timeout int) *output.HeaderResult {
 		URL:     url,
 		Headers: hmap,
 		CORS:    acao,
+		Success: true,
 	}
 
 	// Generate findings for missing headers
@@ -122,14 +132,30 @@ func auditURL(url string, timeout int) *output.HeaderResult {
 	return result
 }
 
-// Run audits security headers for all live probe results
-func Run(probeResults []output.ProbeResult, liveHosts []output.ProbeResult) []output.HeaderResult {
+// Run audits security headers for all live probe results concurrently
+func Run(probeResults []output.ProbeResult, liveHosts []output.ProbeResult, timeout int, threads int, delayMs int) []output.HeaderResult {
 	results := make([]output.HeaderResult, 0, len(liveHosts))
+	var mu sync.Mutex
+	sem := make(chan struct{}, threads) // Use user-defined concurrency
+	var wg sync.WaitGroup
+
 	for _, p := range liveHosts {
-		r := auditURL(p.URL, 5)
-		if r != nil {
-			results = append(results, *r)
-		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(pr output.ProbeResult) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if delayMs > 0 {
+				time.Sleep(time.Duration(delayMs) * time.Millisecond)
+			}
+			r := auditURL(pr.URL, timeout)
+			if r != nil {
+				mu.Lock()
+				results = append(results, *r)
+				mu.Unlock()
+			}
+		}(p)
 	}
+	wg.Wait()
 	return results
 }

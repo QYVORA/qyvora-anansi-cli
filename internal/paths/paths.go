@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -93,11 +94,50 @@ func checkPath(client *http.Client, baseURL string, rule pathRule, baseline base
 		return nil
 	}
 
+	severity := rule.severity
+	title := rule.title
+	description := fmt.Sprintf("%s returned HTTP %d", rule.path, resp.StatusCode)
 	evidence := fmt.Sprintf("HTTP %d at %s", resp.StatusCode, target)
 
-	// Capture body for critical/high hits
-	if rule.captureBody && (rule.severity == output.Critical || rule.severity == output.High) {
-		// Sanitize null bytes
+	// If it's a redirect, trace the landing URL to detect false positives
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		followClient := &http.Client{
+			Timeout:   client.Timeout,
+			Transport: client.Transport,
+		}
+		fReq, fErr := http.NewRequest("GET", target, nil)
+		if fErr == nil {
+			fReq.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ANANSI-CLI/1.0)")
+			fResp, fRespErr := followClient.Do(fReq)
+			if fRespErr == nil {
+				defer fResp.Body.Close()
+				finalStatus := fResp.StatusCode
+				finalURL := fResp.Request.URL.String()
+
+				isRootRedirect := false
+				uParsed, pErr := url.Parse(finalURL)
+				if pErr == nil {
+					pathClean := strings.Trim(uParsed.Path, "/")
+					if pathClean == "" || pathClean == "index.html" || pathClean == "index.php" || pathClean == "home" {
+						isRootRedirect = true
+					}
+				}
+
+				// If it redirects to an error page or the root/homepage, it's likely a false positive
+				if finalStatus == 404 || finalStatus == 400 || finalStatus == 410 || finalStatus == 403 || isRootRedirect {
+					severity = output.Info
+					title = "[POTENTIAL FALSE POSITIVE] " + rule.title
+					description = fmt.Sprintf("%s returned HTTP %d but redirects to %s (HTTP %d)", rule.path, resp.StatusCode, finalURL, finalStatus)
+					evidence = fmt.Sprintf("Redirect: HTTP %d -> %s (HTTP %d)", resp.StatusCode, finalURL, finalStatus)
+				} else {
+					evidence = fmt.Sprintf("Redirect: HTTP %d -> %s (HTTP %d)", resp.StatusCode, finalURL, finalStatus)
+				}
+			}
+		}
+	}
+
+	// Capture body snippet for critical/high hits that are not flagged as false positives
+	if severity != output.Info && rule.captureBody && (severity == output.Critical || severity == output.High) {
 		snippet := strings.ReplaceAll(string(body), "\x00", "")
 		snippet = strings.TrimSpace(snippet)
 		if len(snippet) > 300 {
@@ -109,17 +149,17 @@ func checkPath(client *http.Client, baseURL string, rule pathRule, baseline base
 	}
 
 	return &output.Finding{
-		Severity:      rule.severity,
-		Title:         rule.title,
+		Severity:      severity,
+		Title:         title,
 		AffectedAsset: target,
-		Description:   fmt.Sprintf("%s returned HTTP %d", rule.path, resp.StatusCode),
+		Description:   description,
 		Evidence:      evidence,
 		Remediation:   fmt.Sprintf("Restrict or remove %s from public access.", rule.path),
 	}
 }
 
 // Run probes all live hosts for exposed paths
-func Run(out *output.Renderer, liveHosts []output.ProbeResult, deep bool, timeout int, threads int) []output.Finding {
+func Run(out *output.Renderer, liveHosts []output.ProbeResult, deep bool, timeout int, threads int, delayMs int) []output.Finding {
 	client := &http.Client{
 		Timeout: time.Duration(timeout) * time.Second,
 		Transport: &http.Transport{
@@ -144,26 +184,44 @@ func Run(out *output.Renderer, liveHosts []output.ProbeResult, deep bool, timeou
 
 	completed := 0
 	for _, host := range liveHosts {
-		baseline := getBaseline(client, host.URL)
-		for _, rule := range rules {
-			wg.Add(1)
+		wg.Add(1)
+		go func(h output.ProbeResult) {
+			defer wg.Done()
+
+			// Get baseline concurrently under semaphore
 			sem <- struct{}{}
-			go func(h output.ProbeResult, r pathRule, bl baselineResponse) {
-				defer wg.Done()
-				defer func() { <-sem }()
-				if f := checkPath(client, h.URL, r, bl); f != nil {
+			baseline := getBaseline(client, h.URL)
+			<-sem
+
+			for _, rule := range rules {
+				wg.Add(1)
+				sem <- struct{}{}
+				go func(r pathRule, bl baselineResponse) {
+					defer wg.Done()
+					defer func() { <-sem }()
+
+					if delayMs > 0 {
+						time.Sleep(time.Duration(delayMs) * time.Millisecond)
+					}
+
+					f := checkPath(client, h.URL, r, bl)
+					if f != nil {
+						mu.Lock()
+						allFindings = append(allFindings, *f)
+						mu.Unlock()
+					} else {
+						out.Verbose(fmt.Sprintf("Path not found: %s%s", h.URL, r.path))
+					}
+
 					mu.Lock()
-					allFindings = append(allFindings, *f)
+					completed++
+					if completed%10 == 0 || completed == totalJobs {
+						out.Progress(completed, totalJobs, "Probing Paths")
+					}
 					mu.Unlock()
-				}
-				mu.Lock()
-				completed++
-				if completed%10 == 0 || completed == totalJobs {
-					out.Progress(completed, totalJobs, "Probing Paths")
-				}
-				mu.Unlock()
-			}(host, rule, baseline)
-		}
+				}(rule, baseline)
+			}
+		}(host)
 	}
 	wg.Wait()
 	return allFindings

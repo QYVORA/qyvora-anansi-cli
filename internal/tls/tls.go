@@ -148,15 +148,22 @@ func tlsVersionName(v uint16) string {
 // 2. Any new subdomains discovered from certificate SANs
 //
 // Only probes hosts that are accessible via HTTPS (determined by prior probe phase).
-func Run(liveProbes []output.ProbeResult, targetDomain string, timeout int) ([]output.TLSResult, []output.SubdomainResult) {
+func Run(liveProbes []output.ProbeResult, targetDomain string, timeout int, threads int, delayMs int) ([]output.TLSResult, []output.SubdomainResult) {
 	results := make([]output.TLSResult, 0)
 	mu := sync.Mutex{}
-	sem := make(chan struct{}, 10) // Max 10 concurrent TLS connections
+	sem := make(chan struct{}, threads) // Use user-defined concurrency
 	var wg sync.WaitGroup
 
 	for _, p := range liveProbes {
 		// Skip hosts that only respond to HTTP (not HTTPS)
 		if !strings.HasPrefix(p.URL, "https://") {
+			mu.Lock()
+			results = append(results, output.TLSResult{
+				Hostname:  p.FQDN,
+				Supported: false,
+				Error:     "No HTTPS support (HTTP only)",
+			})
+			mu.Unlock()
 			continue
 		}
 		wg.Add(1)
@@ -164,12 +171,21 @@ func Run(liveProbes []output.ProbeResult, targetDomain string, timeout int) ([]o
 		go func(pr output.ProbeResult) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			r, err := probeHost(pr.FQDN, timeout)
-			if err != nil {
-				return // TLS probe failed
+			if delayMs > 0 {
+				time.Sleep(time.Duration(delayMs) * time.Millisecond)
 			}
+			r, err := probeHost(pr.FQDN, timeout)
 			mu.Lock()
-			results = append(results, *r)
+			if err != nil {
+				results = append(results, output.TLSResult{
+					Hostname:  pr.FQDN,
+					Supported: false,
+					Error:     err.Error(),
+				})
+			} else {
+				r.Supported = true
+				results = append(results, *r)
+			}
 			mu.Unlock()
 		}(p)
 	}

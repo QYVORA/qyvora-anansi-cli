@@ -5,6 +5,7 @@
 package discovery
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -16,6 +17,11 @@ import (
 	"github.com/wsuits6/qyvora-anansi-cli/internal/assets"
 	"github.com/wsuits6/qyvora-anansi-cli/internal/output"
 )
+
+// Use a Go-native resolver to enable faster, non-blocking concurrent lookups
+var dnsResolver = &net.Resolver{
+	PreferGo: true,
+}
 
 // crtEntry represents a single entry from the crt.sh JSON API response.
 // The name_value field can contain multiple DNS names separated by newlines.
@@ -62,15 +68,15 @@ func fetchCrtSh(target string, timeout int) ([]string, error) {
 	return results, nil
 }
 
-// resolveHost attempts to resolve a FQDN to IP addresses.
+// resolveHost attempts to resolve a FQDN to IP addresses using context for timeout.
 // Returns (IPs, deadCNAMEs). If DNS resolution fails but a CNAME exists that doesn't resolve,
 // it's returned as a "dead CNAME" which could indicate a subdomain takeover vulnerability.
-func resolveHost(fqdn string) ([]string, []string) {
-	ips, err := net.LookupHost(fqdn)
+func resolveHost(ctx context.Context, fqdn string) ([]string, []string) {
+	ips, err := dnsResolver.LookupHost(ctx, fqdn)
 	if err != nil {
 		// Host doesn't resolve to an IP. Check if there's a CNAME record
 		// that points somewhere but doesn't resolve (potential takeover).
-		cname, cerr := net.LookupCNAME(fqdn)
+		cname, cerr := dnsResolver.LookupCNAME(ctx, fqdn)
 		// If CNAME exists and is different from the input
 		if cerr == nil && cname != fqdn+"." {
 			return nil, []string{strings.TrimSuffix(cname, ".")}
@@ -91,9 +97,9 @@ func resolveHost(fqdn string) ([]string, []string) {
 
 // detectWildcard checks if a domain has a wildcard DNS record by probing
 // a random, non-existent subdomain. Returns the IPs it resolves to, if any.
-func detectWildcard(target string) []string {
+func detectWildcard(ctx context.Context, target string) []string {
 	randomSub := fmt.Sprintf("anansi-wildcard-test-%d.%s", time.Now().UnixNano(), target)
-	ips, _ := net.LookupHost(randomSub)
+	ips, _ := dnsResolver.LookupHost(ctx, randomSub)
 	return ips
 }
 
@@ -102,10 +108,12 @@ func detectWildcard(target string) []string {
 // 2. Generate candidates from wordlist (default or deep)
 // 3. Resolve all candidates concurrently via DNS
 // 4. Return results with resolution status and any dead CNAMEs
-func Run(out *output.Renderer, target string, deep bool, timeout int, customWordlist string, threads int) ([]output.SubdomainResult, error) {
+func Run(out *output.Renderer, target string, deep bool, timeout int, customWordlist string, threads int, recursive bool, mutate bool, delayMs int) ([]output.SubdomainResult, error) {
 	// Detect wildcard DNS
 	out.Info("Detecting DNS wildcard...")
-	wildcardIPs := detectWildcard(target)
+	ctxWildcard, cancelWildcard := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+	wildcardIPs := detectWildcard(ctxWildcard, target)
+	cancelWildcard()
 	isWildcard := len(wildcardIPs) > 0
 	wildcardMap := make(map[string]struct{})
 	for _, ip := range wildcardIPs {
@@ -165,7 +173,13 @@ func Run(out *output.Renderer, target string, deep bool, timeout int, customWord
 			defer wg.Done()
 			defer func() { <-sem }() // Release semaphore slot
 
-			ips, deadCNAMEs := resolveHost(j.fqdn)
+			if delayMs > 0 {
+				time.Sleep(time.Duration(delayMs) * time.Millisecond)
+			}
+
+			ctxResolve, cancelResolve := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+			ips, deadCNAMEs := resolveHost(ctxResolve, j.fqdn)
+			cancelResolve()
 
 			// If wildcard detected, filter out results that resolve to wildcard IPs
 			// unless the subdomain was found via crt.sh (more likely to be legitimate)
@@ -200,7 +214,231 @@ func Run(out *output.Renderer, target string, deep bool, timeout int, customWord
 	}
 	wg.Wait()
 
+	// Perform recursive subdomain brute-forcing if enabled
+	if recursive {
+		var resolvedSubs []string
+		for _, r := range results {
+			if r.Resolved && r.FQDN != target {
+				resolvedSubs = append(resolvedSubs, r.FQDN)
+			}
+		}
+
+		if len(resolvedSubs) > 0 {
+			out.Info(fmt.Sprintf("Running recursive brute-force on %d resolved subdomains...", len(resolvedSubs)))
+
+			var recJobs []job
+			seenRec := map[string]struct{}{}
+			for _, r := range results {
+				seenRec[r.FQDN] = struct{}{}
+			}
+
+			for _, sub := range resolvedSubs {
+				for _, prefix := range wordlist {
+					fqdn := prefix + "." + sub
+					if _, exists := seenRec[fqdn]; !exists {
+						seenRec[fqdn] = struct{}{}
+						recJobs = append(recJobs, job{fqdn, "wordlist"})
+					}
+				}
+			}
+
+			if len(recJobs) > 0 {
+				out.Info(fmt.Sprintf("Resolving %d recursive candidates with %d threads...", len(recJobs), threads))
+				completedRec := 0
+				var recWg sync.WaitGroup
+
+				for _, j := range recJobs {
+					recWg.Add(1)
+					sem <- struct{}{}
+					go func(j job) {
+						defer recWg.Done()
+						defer func() { <-sem }()
+
+						if delayMs > 0 {
+							time.Sleep(time.Duration(delayMs) * time.Millisecond)
+						}
+
+						ctxResolve, cancelResolve := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+						ips, deadCNAMEs := resolveHost(ctxResolve, j.fqdn)
+						cancelResolve()
+
+						if isWildcard && len(ips) > 0 {
+							isOnlyWildcard := true
+							for _, ip := range ips {
+								if _, ok := wildcardMap[ip]; !ok {
+									isOnlyWildcard = false
+									break
+								}
+							}
+							if isOnlyWildcard {
+								ips = nil
+							}
+						}
+
+						result := output.SubdomainResult{
+							FQDN:       j.fqdn,
+							Source:     j.source,
+							IPs:        ips,
+							DeadCNAMEs: deadCNAMEs,
+							Resolved:   len(ips) > 0,
+						}
+
+						mu.Lock()
+						results = append(results, result)
+						completedRec++
+						if completedRec%10 == 0 || completedRec == len(recJobs) {
+							out.Progress(completedRec, len(recJobs), "Resolving")
+						}
+						mu.Unlock()
+					}(j)
+				}
+				recWg.Wait()
+			}
+		}
+	}
+
+	// Perform subdomain mutation brute-forcing if enabled
+	if mutate {
+		var resolvedSubs []string
+		for _, r := range results {
+			if r.Resolved && r.FQDN != target {
+				resolvedSubs = append(resolvedSubs, r.FQDN)
+			}
+		}
+
+		mutatedCandidates := MutateSubdomains(resolvedSubs, target)
+		if len(mutatedCandidates) > 0 {
+			out.Info(fmt.Sprintf("Running subdomain mutation brute-force on %d candidates...", len(mutatedCandidates)))
+
+			var mutJobs []job
+			seenMut := map[string]struct{}{}
+			for _, r := range results {
+				seenMut[r.FQDN] = struct{}{}
+			}
+
+			for _, candidate := range mutatedCandidates {
+				if _, exists := seenMut[candidate]; !exists {
+					seenMut[candidate] = struct{}{}
+					mutJobs = append(mutJobs, job{candidate, "mutation"})
+				}
+			}
+
+			if len(mutJobs) > 0 {
+				out.Info(fmt.Sprintf("Resolving %d mutated candidates with %d threads...", len(mutJobs), threads))
+				completedMut := 0
+				var mutWg sync.WaitGroup
+
+				for _, j := range mutJobs {
+					mutWg.Add(1)
+					sem <- struct{}{}
+					go func(j job) {
+						defer mutWg.Done()
+						defer func() { <-sem }()
+
+						if delayMs > 0 {
+							time.Sleep(time.Duration(delayMs) * time.Millisecond)
+						}
+
+						ctxResolve, cancelResolve := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+						ips, deadCNAMEs := resolveHost(ctxResolve, j.fqdn)
+						cancelResolve()
+
+						if isWildcard && len(ips) > 0 {
+							isOnlyWildcard := true
+							for _, ip := range ips {
+								if _, ok := wildcardMap[ip]; !ok {
+									isOnlyWildcard = false
+									break
+								}
+							}
+							if isOnlyWildcard {
+								ips = nil
+							}
+						}
+
+						result := output.SubdomainResult{
+							FQDN:       j.fqdn,
+							Source:     j.source,
+							IPs:        ips,
+							DeadCNAMEs: deadCNAMEs,
+							Resolved:   len(ips) > 0,
+						}
+
+						mu.Lock()
+						results = append(results, result)
+						completedMut++
+						if completedMut%10 == 0 || completedMut == len(mutJobs) {
+							out.Progress(completedMut, len(mutJobs), "Resolving")
+						}
+						mu.Unlock()
+					}(j)
+				}
+				mutWg.Wait()
+			}
+		}
+	}
+
 	return results, nil
+}
+
+// MutateSubdomains generates target-specific subdomain mutations from resolved prefixes
+func MutateSubdomains(resolved []string, target string) []string {
+	var mutated []string
+	prefixes := make([]string, 0)
+	for _, fqdn := range resolved {
+		prefix := strings.TrimSuffix(fqdn, "."+target)
+		if prefix != target && prefix != "" {
+			prefixes = append(prefixes, prefix)
+		}
+	}
+
+	if len(prefixes) == 0 {
+		return nil
+	}
+
+	seen := map[string]struct{}{}
+	commonWords := []string{"admin", "staging", "test", "prod", "internal", "dev", "api", "static", "corp"}
+
+	for _, p := range prefixes {
+		// 1. Append/Prepend common words with hyphen
+		for _, w := range commonWords {
+			if w != p {
+				seen[p+"-"+w] = struct{}{}
+				seen[w+"-"+p] = struct{}{}
+			}
+		}
+
+		// 2. Increment/Decrement numbers if prefix ends in a number
+		lastChar := p[len(p)-1]
+		if lastChar >= '0' && lastChar <= '9' {
+			base := p[:len(p)-1]
+			seen[base+"1"] = struct{}{}
+			seen[base+"2"] = struct{}{}
+			seen[base+"3"] = struct{}{}
+			seen[base+"4"] = struct{}{}
+			seen[base+"5"] = struct{}{}
+		}
+	}
+
+	// 3. Cross-mutation of found prefixes (e.g., api-dev, dev-api)
+	if len(prefixes) > 1 {
+		maxCombos := 100
+		count := 0
+		for i := 0; i < len(prefixes) && count < maxCombos; i++ {
+			for j := 0; j < len(prefixes) && count < maxCombos; j++ {
+				if i != j {
+					seen[prefixes[i]+"-"+prefixes[j]] = struct{}{}
+					count++
+				}
+			}
+		}
+	}
+
+	for m := range seen {
+		mutated = append(mutated, m+"."+target)
+	}
+
+	return mutated
 }
 
 // LiveHosts filters subdomain results to return only the FQDNs that resolved to a public IP.
