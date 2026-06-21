@@ -2,7 +2,7 @@
 
 **Attack Surface Intelligence Engine — Terminal Edition**
 
-Built by [QYVORA OffSec](https://qyvora.netlify.app) — an offensive security company operating out of Accra, Ghana.
+Built by [QYVORA OffSec](https://qyvora.netlify.app) — an offensive security company operating out of Tamale, Ghana.
 
 ```
 anansi target.com
@@ -149,6 +149,7 @@ anansi target.com --out html > report.html
 | `--out` | | terminal | Output format: `terminal` \| `json` \| `markdown` \| `html` |
 | `--timeout` | | 5 | Per-request timeout in seconds |
 | `--threads` | `-t` | 50 | Number of concurrent threads to use for scanning |
+| `--stealth` | | false | Enable stealth mode: random User-Agent, jitter, skip crt.sh, reduce noise |
 | `--modules` | | all | Comma-separated list of modules to run |
 
 ### Module names for `--modules`
@@ -166,7 +167,7 @@ Terminal output built for operators. No bar charts, no letter grades:
   │  ANANSI  Attack Surface Intelligence Engine             │
   │  TARGET  target.com                                     │
   │  TIME    2025-06-01 14:22:01 UTC                        │
-  │  BY      QYVORA OffSec // github.com/wsuits6/qyvora-anansi-cli  │
+  │  BY      QYVORA OffSec // qyvora.netlify.app                    │
   └─────────────────────────────────────────────────────────┘
 
   ══ PHASE 01 ── DISCOVERY // subdomain enumeration + DNS resolution
@@ -241,7 +242,7 @@ anansi-cli/
 
 The pentesting and bug bounty community runs on Linux terminals. Tools should be single binaries that do one thing well and get out of the way. No web UI, no cloud account, no API key required.
 
-ANANSI CLI is the portable companion to [ANANSI](https://qyvora.io/anansi) — the API-powered attack surface intelligence service built into the QYVORA OffSec platform. Same detection logic. Same output philosophy. CLI is for your laptop. The API is for your pipeline.
+ANANSI CLI is the portable companion to the full ANANSI platform — the API-powered attack surface intelligence service built into the QYVORA OffSec ecosystem. Same detection logic. Same output philosophy. CLI is for your laptop. The API is for your pipeline.
 
 ---
 
@@ -263,5 +264,5 @@ PRs welcome. Open an issue first for major changes. If you add a new path rule, 
 
 ---
 
-*QYVORA // Accra, Ghana*
+*QYVORA // Tamale, Ghana*
 *Cybersecurity in Africa is booming. We are building the people behind it.*

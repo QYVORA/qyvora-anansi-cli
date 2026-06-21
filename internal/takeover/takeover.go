@@ -1,3 +1,7 @@
+// Package takeover detects subdomain takeover vulnerabilities by identifying
+// dangling CNAME records — DNS entries that point to third-party services
+// (GitHub Pages, Heroku, AWS S3, etc.) where the resource has been deleted
+// or is otherwise unclaimed, allowing an attacker to claim it.
 package takeover
 
 import (
@@ -36,18 +40,33 @@ func init() {
 	}
 }
 
-func checkTakeover(client *http.Client, subdomain string, deadCNAMEs []string) *output.Finding {
+func checkTakeover(client *http.Client, subdomain string, deadCNAMEs []string, stealth bool) *output.Finding {
 	for _, cname := range deadCNAMEs {
 		cnameLower := strings.ToLower(cname)
 		for _, fp := range fingerprints {
 			if !strings.Contains(cnameLower, fp.cnameSuffix) {
 				continue
 			}
-			// CNAME matches — confirm with body fingerprint
-			resp, err := client.Get("http://" + subdomain)
+
+			req, err := http.NewRequest("GET", "http://"+subdomain, nil)
 			if err != nil {
-				// Also try with HTTPS
-				resp, err = client.Get("https://" + subdomain)
+				continue
+			}
+			if stealth {
+				req.Header.Set("User-Agent", output.RandomUA())
+			} else {
+				req.Header.Set("User-Agent", output.DefaultUA)
+			}
+
+			resp, err := client.Do(req)
+			if err != nil {
+				req, _ = http.NewRequest("GET", "https://"+subdomain, nil)
+				if stealth {
+					req.Header.Set("User-Agent", output.RandomUA())
+				} else {
+					req.Header.Set("User-Agent", output.DefaultUA)
+				}
+				resp, err = client.Do(req)
 				if err != nil {
 					continue
 				}
@@ -76,16 +95,16 @@ func resolveCNAMEs(fqdn string) []string {
 		return nil
 	}
 	cname = strings.TrimSuffix(cname, ".")
-	// Also check if the CNAME itself resolves
-	_, err = net.LookupHost(cname)
-	if err == nil {
-		return nil // CNAME resolves fine — not a dead record
+	if _, err := net.LookupHost(cname); err == nil {
+		return nil
 	}
 	return []string{cname}
 }
 
-// Run checks all dead subdomains for takeover candidates
-func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int, threads int, delayMs int) []output.Finding {
+// Run checks all unresolved subdomains for takeover candidates.  It uses
+// dead CNAMEs gathered during discovery and attempts to confirm the
+// vulnerability by checking the response body for known service fingerprints.
+func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int, threads int, delayMs int, stealth bool) []output.Finding {
 	client := &http.Client{
 		Timeout: time.Duration(timeout) * time.Second,
 		Transport: &http.Transport{
@@ -100,8 +119,7 @@ func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int,
 	var candidates []output.SubdomainResult
 	for _, s := range subdomains {
 		if !s.Resolved {
-			// Only check subdomains that resolved to dead CNAMEs or came from SAN discovery
-			if len(s.DeadCNAMEs) > 0 || s.Source == "san" {
+			if len(s.DeadCNAMEs) > 0 || s.Source == output.SourceSAN {
 				candidates = append(candidates, s)
 			} else {
 				out.Verbose(fmt.Sprintf("Subdomain skipped for takeover (no dead CNAME): %s", s.FQDN))
@@ -115,7 +133,7 @@ func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int,
 
 	var findings []output.Finding
 	mu := sync.Mutex{}
-	sem := make(chan struct{}, threads) // Use user-defined concurrency
+	sem := make(chan struct{}, threads)
 	var wg sync.WaitGroup
 
 	completed := 0
@@ -126,11 +144,11 @@ func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int,
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			if delayMs > 0 {
-				time.Sleep(time.Duration(delayMs) * time.Millisecond)
+			delay := output.JitterDelay(delayMs, stealth)
+			if delay > 0 {
+				time.Sleep(delay)
 			}
 
-			// Use stored dead CNAMEs if available, otherwise resolve now
 			deadCNAMEs := sub.DeadCNAMEs
 			if len(deadCNAMEs) == 0 {
 				deadCNAMEs = resolveCNAMEs(sub.FQDN)
@@ -144,7 +162,7 @@ func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int,
 				return
 			}
 
-			if f := checkTakeover(client, sub.FQDN, deadCNAMEs); f != nil {
+			if f := checkTakeover(client, sub.FQDN, deadCNAMEs, stealth); f != nil {
 				mu.Lock()
 				findings = append(findings, *f)
 				mu.Unlock()

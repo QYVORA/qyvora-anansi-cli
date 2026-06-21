@@ -1,5 +1,6 @@
-// Package probe implements HTTP/HTTPS connectivity testing.
-// It attempts to connect to hosts, captures response metadata, and identifies technology.
+// Package probe implements HTTP/HTTPS connectivity testing against live hosts.
+// It captures response metadata (status codes, headers, page titles, redirect
+// chains) and identifies web technologies through header and body fingerprinting.
 package probe
 
 import (
@@ -15,18 +16,16 @@ import (
 	"github.com/wsuits6/qyvora-anansi-cli/internal/output"
 )
 
-// techHeaders are HTTP headers that reveal information about the server technology stack.
-// These are collected and included in probe results for fingerprinting.
 var techHeaders []string
 
 func init() {
 	techHeaders = assets.LoadData("wordlists/probe/tech_headers.txt")
 }
 
-// newClient creates an HTTP client configured for security scanning:
-// - InsecureSkipVerify: allows testing hosts with invalid/self-signed certs
-// - DisableKeepAlives: prevents connection reuse (cleaner for concurrent scans)
-// - Follows up to 3 redirects, then stops
+// newClient creates an HTTP client configured for security scanning.
+// InsecureSkipVerify allows probing hosts with invalid or self-signed
+// certificates.  DisableKeepAlives prevents connection reuse and keeps
+// concurrent scans clean.  Up to three redirects are followed.
 func newClient(timeoutSec int) *http.Client {
 	return &http.Client{
 		Timeout: time.Duration(timeoutSec) * time.Second,
@@ -36,23 +35,27 @@ func newClient(timeoutSec int) *http.Client {
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 3 {
-				return http.ErrUseLastResponse // Stop following redirects
+				return http.ErrUseLastResponse
 			}
 			return nil
 		},
 	}
 }
 
-// probeURL attempts to fetch a specific URL and returns metadata about the response.
-// Extracts: status code, headers, page title, server info, response time, and technologies.
-// Returns nil if the request fails (host unreachable, timeout, etc.)
-func probeURL(client *http.Client, url string) *output.ProbeResult {
+// probeURL attempts to fetch a single URL and returns metadata about the
+// response: status code, headers, page title, server info, response time,
+// and detected technologies.  Returns nil on transport error.
+func probeURL(client *http.Client, url string, stealth bool) *output.ProbeResult {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil
 	}
-	// Use a realistic User-Agent to avoid basic bot detection
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ANANSI-CLI/1.0; +https://github.com/wsuits6/qyvora-anansi-cli)")
+
+	if stealth {
+		req.Header.Set("User-Agent", output.RandomUA())
+	} else {
+		req.Header.Set("User-Agent", output.DefaultUA)
+	}
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
 
 	start := time.Now()
@@ -63,10 +66,8 @@ func probeURL(client *http.Client, url string) *output.ProbeResult {
 	defer resp.Body.Close()
 	elapsed := time.Since(start).Milliseconds()
 
-	// Read enough body for tech detection and title extraction (8KB)
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 
-	// Extract <title> from HTML pages
 	title := ""
 	if strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
 		if idx := strings.Index(strings.ToLower(string(body)), "<title"); idx != -1 {
@@ -79,7 +80,6 @@ func probeURL(client *http.Client, url string) *output.ProbeResult {
 		}
 	}
 
-	// Collect technology fingerprinting headers
 	tech := map[string]string{}
 	for _, h := range techHeaders {
 		if v := resp.Header.Get(h); v != "" {
@@ -87,12 +87,11 @@ func probeURL(client *http.Client, url string) *output.ProbeResult {
 		}
 	}
 
-	// Detect running technologies
 	detectedTechs := detectTech(resp.Header, body)
 
 	return &output.ProbeResult{
 		URL:            url,
-		FinalURL:       resp.Request.URL.String(), // After following redirects
+		FinalURL:       resp.Request.URL.String(),
 		StatusCode:     resp.StatusCode,
 		Server:         resp.Header.Get("Server"),
 		TechHeaders:    tech,
@@ -103,12 +102,12 @@ func probeURL(client *http.Client, url string) *output.ProbeResult {
 	}
 }
 
-// detectTech parses headers and response body for common web technologies
+// detectTech parses HTTP response headers and body for known web
+// technology fingerprints.
 func detectTech(headers http.Header, body []byte) []string {
 	var techs []string
 	bodyStr := strings.ToLower(string(body))
 
-	// Header checks
 	poweredBy := strings.ToLower(headers.Get("X-Powered-By"))
 	if strings.Contains(poweredBy, "php") {
 		techs = append(techs, "PHP")
@@ -121,44 +120,41 @@ func detectTech(headers http.Header, body []byte) []string {
 	}
 
 	server := strings.ToLower(headers.Get("Server"))
-	if strings.Contains(server, "cloudflare") {
+	switch {
+	case strings.Contains(server, "cloudflare"):
 		techs = append(techs, "Cloudflare")
-	} else if strings.Contains(server, "nginx") {
+	case strings.Contains(server, "nginx"):
 		techs = append(techs, "Nginx")
-	} else if strings.Contains(server, "apache") {
+	case strings.Contains(server, "apache"):
 		techs = append(techs, "Apache")
 	}
 
-	// Body checks
-	if strings.Contains(bodyStr, "wordpress") || strings.Contains(bodyStr, "/wp-content/") {
+	switch {
+	case strings.Contains(bodyStr, "wordpress") || strings.Contains(bodyStr, "/wp-content/"):
 		techs = append(techs, "WordPress")
-	}
-	if strings.Contains(bodyStr, "_next/static") || strings.Contains(bodyStr, "__next") {
+	case strings.Contains(bodyStr, "_next/static") || strings.Contains(bodyStr, "__next"):
 		techs = append(techs, "Next.js")
-	}
-	if strings.Contains(bodyStr, "react-dom") || strings.Contains(bodyStr, "react.production") || strings.Contains(bodyStr, "data-reactroot") {
+	case strings.Contains(bodyStr, "react-dom") || strings.Contains(bodyStr, "react.production") || strings.Contains(bodyStr, "data-reactroot"):
 		techs = append(techs, "React")
-	}
-	if strings.Contains(bodyStr, "drupal") || strings.Contains(bodyStr, "sites/default/files") {
+	case strings.Contains(bodyStr, "drupal") || strings.Contains(bodyStr, "sites/default/files"):
 		techs = append(techs, "Drupal")
-	}
-	if strings.Contains(bodyStr, "joomla") {
+	case strings.Contains(bodyStr, "joomla"):
 		techs = append(techs, "Joomla")
-	}
-	if strings.Contains(bodyStr, "<app-root>") {
+	case strings.Contains(bodyStr, "<app-root>"):
 		techs = append(techs, "Angular")
 	}
 
 	return techs
 }
 
-// probeHost tests multiple ports for a given FQDN.
-// Returns results for all active ports.
-func probeHost(client *http.Client, fqdn string, ports []string, delayMs int) []*output.ProbeResult {
+// probeHost tests multiple port/scheme combinations for a single FQDN and
+// returns results for all responsive ports.
+func probeHost(client *http.Client, fqdn string, ports []string, delayMs int, stealth bool) []*output.ProbeResult {
 	var results []*output.ProbeResult
 	for _, port := range ports {
-		if delayMs > 0 {
-			time.Sleep(time.Duration(delayMs) * time.Millisecond)
+		delay := output.JitterDelay(delayMs, stealth)
+		if delay > 0 {
+			time.Sleep(delay)
 		}
 
 		var schemes []string
@@ -173,10 +169,10 @@ func probeHost(client *http.Client, fqdn string, ports []string, delayMs int) []
 			if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
 				url = fmt.Sprintf("%s://%s", scheme, fqdn)
 			}
-			if r := probeURL(client, url); r != nil {
+			if r := probeURL(client, url, stealth); r != nil {
 				r.FQDN = fqdn
 				results = append(results, r)
-				break // found a working scheme for this port
+				break
 			}
 		}
 	}
@@ -186,22 +182,22 @@ func probeHost(client *http.Client, fqdn string, ports []string, delayMs int) []
 	return results
 }
 
-// Run probes all hosts concurrently with a semaphore limiting parallelism.
-func Run(out *output.Renderer, hosts []string, timeout int, threads int, ports []string, delayMs int) ([]output.ProbeResult, error) {
+// Run probes all hosts concurrently with a semaphore to limit parallelism.
+func Run(out *output.Renderer, hosts []string, timeout int, threads int, ports []string, delayMs int, stealth bool) ([]output.ProbeResult, error) {
 	client := newClient(timeout)
 	results := make([]output.ProbeResult, 0, len(hosts))
 	mu := sync.Mutex{}
-	sem := make(chan struct{}, threads) // Use user-defined concurrency
+	sem := make(chan struct{}, threads)
 	var wg sync.WaitGroup
 
 	completed := 0
 	for _, host := range hosts {
 		wg.Add(1)
-		sem <- struct{}{} // Acquire semaphore slot
+		sem <- struct{}{}
 		go func(h string) {
 			defer wg.Done()
-			defer func() { <-sem }() // Release semaphore slot
-			rs := probeHost(client, h, ports, delayMs)
+			defer func() { <-sem }()
+			rs := probeHost(client, h, ports, delayMs, stealth)
 			mu.Lock()
 			for _, r := range rs {
 				results = append(results, *r)
@@ -217,7 +213,8 @@ func Run(out *output.Renderer, hosts []string, timeout int, threads int, ports [
 	return results, nil
 }
 
-// LiveOnly filters probe results to return only hosts that responded to HTTP/HTTPS.
+// LiveOnly filters a ProbeResult slice to return only hosts that
+// responded successfully.
 func LiveOnly(results []output.ProbeResult) []output.ProbeResult {
 	var live []output.ProbeResult
 	for _, r := range results {

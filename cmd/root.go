@@ -19,44 +19,46 @@ import (
 	"github.com/wsuits6/qyvora-anansi-cli/internal/tls"
 )
 
-// Command-line flags that control scan behavior
 var (
-	flagDeep      bool     // If true, uses larger wordlists and more aggressive scanning
-	flagOut       string   // Output format: "terminal", "json", or "markdown"
-	flagTimeout   int      // Per-request timeout in seconds (default: 5)
-	flagModules   []string // List of modules to run (e.g., ["discovery", "probe", "tls"])
-	flagWordlist  string   // Path to a custom subdomain wordlist
-	flagThreads   int      // Number of concurrent threads for scanning
-	flagVerbose   bool     // Verbose mode (show all found and not found results)
-	flagRecursive bool     // Enable recursive subdomain brute-forcing
-	flagMutate    bool     // Enable subdomain mutation brute-forcing
-	flagDelay     int      // Delay between requests in milliseconds for rate limiting
-	flagPorts     []string // List of ports to probe (default: ["80", "443"])
+	flagDeep      bool
+	flagOut       string
+	flagTimeout   int
+	flagModules   []string
+	flagWordlist  string
+	flagThreads   int
+	flagVerbose   bool
+	flagRecursive bool
+	flagMutate    bool
+	flagDelay     int
+	flagPorts     []string
+	flagStealth   bool
 )
 
-// rootCmd is the main Cobra command that defines the CLI structure.
-// It requires exactly one argument: the target domain to scan.
+// rootCmd is the main Cobra command.  It requires exactly one argument:
+// the target domain to scan.  The full ASCII art banner is shown in the
+// help text.
 var rootCmd = &cobra.Command{
 	Use:   "anansi [target]",
 	Short: "ANANSI — Attack Surface Intelligence Engine",
 	Long: color.New(color.FgCyan, color.Bold).Sprint(output.AnansiASCIIArt) + `
 
-  Attack Surface Intelligence Engine — QYVORA OffSec
-  github.com/wsuits6/qyvora-anansi-cli
+  Attack Surface Intelligence Engine — ` + output.CompanyName + `
+  ` + output.CompanyURL + `
+  Built in ` + output.BuiltIn + `
 `,
-	Args: cobra.ExactArgs(1), // Requires exactly one argument: the target domain
-	RunE: runScan,            // The function that executes when the command is run
+	Args: cobra.ExactArgs(1),
+	RunE: runScan,
 }
 
-// Execute is called by main.go. It runs the root command and handles any errors.
-// This function is called automatically before main().
+// Execute is called by main.go.  It runs the root Cobra command and
+// exits with a non-zero status code on error.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
-// init sets up all command-line flags and their default values.
+// init registers all CLI flags with their default values and help text.
 func init() {
 	rootCmd.Flags().BoolVar(&flagDeep, "deep", false, "Enable deep scan (larger wordlist, more path probing)")
 	rootCmd.Flags().StringVar(&flagOut, "out", "terminal", "Output format: terminal | json | markdown | html")
@@ -64,15 +66,16 @@ func init() {
 	rootCmd.Flags().StringSliceVar(&flagModules, "modules", []string{"discovery", "probe", "tls", "headers", "paths", "takeover"}, "Modules to run (comma-separated)")
 	rootCmd.Flags().StringVarP(&flagWordlist, "wordlist", "w", "", "Path to custom subdomain wordlist")
 	rootCmd.Flags().IntVarP(&flagThreads, "threads", "t", 50, "Number of concurrent threads")
-	rootCmd.Flags().BoolVarP(&flagVerbose, "verbose", "v", false, "Enable verbose output (show not found/failed results)")
-	rootCmd.Flags().BoolVarP(&flagRecursive, "recursive", "r", false, "Enable recursive subdomain brute-forcing on resolved subdomains")
-	rootCmd.Flags().BoolVarP(&flagMutate, "mutate", "m", false, "Enable subdomain mutation brute-forcing based on resolved prefixes")
-	rootCmd.Flags().IntVar(&flagDelay, "delay", 0, "Delay between requests in milliseconds for rate limiting")
-	rootCmd.Flags().StringSliceVarP(&flagPorts, "ports", "p", []string{"80", "443"}, "Alternative ports to probe (comma-separated)")
+	rootCmd.Flags().BoolVarP(&flagVerbose, "verbose", "v", false, "Show all results including not-found/failed items")
+	rootCmd.Flags().BoolVarP(&flagRecursive, "recursive", "r", false, "Enable recursive subdomain brute-force on resolved subdomains")
+	rootCmd.Flags().BoolVarP(&flagMutate, "mutate", "m", false, "Enable subdomain mutation brute-force based on resolved prefixes")
+	rootCmd.Flags().IntVar(&flagDelay, "delay", 0, "Delay between requests in ms for rate limiting")
+	rootCmd.Flags().StringSliceVarP(&flagPorts, "ports", "p", []string{"80", "443"}, "Ports to probe (comma-separated)")
+	rootCmd.Flags().BoolVar(&flagStealth, "stealth", false, "Enable stealth mode: random UA, jitter, skip crt.sh, reduced concurrency")
 }
 
-// hasModule checks if a given module name is in the user's --modules flag.
-// It performs case-insensitive comparison.
+// hasModule reports whether the given module name is present in the
+// --modules flag (case-insensitive).
 func hasModule(name string) bool {
 	for _, m := range flagModules {
 		if strings.EqualFold(strings.TrimSpace(m), name) {
@@ -82,35 +85,35 @@ func hasModule(name string) bool {
 	return false
 }
 
-// runScan is the main scanning orchestrator. It runs all enabled modules in sequence,
-// passes data between phases, and generates the final report.
+// runScan is the top-level scan orchestrator.  It runs each enabled module
+// in sequence, passes results between phases, and returns the final report.
 func runScan(cmd *cobra.Command, args []string) error {
-	// Normalize the target domain: remove protocol, paths, convert to lowercase
 	target := strings.ToLower(strings.TrimSpace(args[0]))
 	target = strings.TrimPrefix(target, "https://")
 	target = strings.TrimPrefix(target, "http://")
-	target = strings.Split(target, "/")[0] // Remove any path components
+	target = strings.Split(target, "/")[0]
 
 	if target == "" {
 		return fmt.Errorf("invalid target")
 	}
 
-	// Initialize timing and output
 	startTime := time.Now()
-	out := output.New(flagOut, flagVerbose) // Creates the renderer (terminal, JSON, or markdown)
+	out := output.New(flagOut, flagVerbose)
+	if flagStealth {
+		out = out.WithStealth()
+	}
+
 	report := &output.Report{
 		Target:    target,
 		StartedAt: startTime,
 	}
 
-	// Display the banner with target info
 	out.Banner(target)
 
-	// ── PHASE 1: DISCOVERY ──────────────────────────────────────────────
-	// Finds subdomains using Certificate Transparency logs (crt.sh) and DNS brute-force
+	// -- PHASE 1: DISCOVERY ------------------------------------------------
 	if hasModule("discovery") {
 		out.PhaseHeader("01", "DISCOVERY", "subdomain enumeration + DNS resolution")
-		subdomains, err := discovery.Run(out, target, flagDeep, flagTimeout, flagWordlist, flagThreads, flagRecursive, flagMutate, flagDelay)
+		subdomains, err := discovery.Run(out, target, flagDeep, flagTimeout, flagWordlist, flagThreads, flagRecursive, flagMutate, flagDelay, flagStealth)
 		if err != nil {
 			out.PhaseError("DISCOVERY", err)
 		} else {
@@ -119,12 +122,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// ── PHASE 2: PROBE ───────────────────────────────────────────────────
-	// Tests HTTP/HTTPS connectivity on live hosts, captures status codes, headers, titles
+	// -- PHASE 2: PROBE ----------------------------------------------------
 	if hasModule("probe") && len(report.Subdomains) > 0 {
 		out.PhaseHeader("02", "PROBE", "HTTP/HTTPS surface mapping")
-		hosts := discovery.LiveHosts(report.Subdomains) // Only probe hosts that resolved to IPs
-		probeResults, err := probe.Run(out, hosts, flagTimeout, flagThreads, flagPorts, flagDelay)
+		hosts := discovery.LiveHosts(report.Subdomains)
+		probeResults, err := probe.Run(out, hosts, flagTimeout, flagThreads, flagPorts, flagDelay, flagStealth)
 		if err != nil {
 			out.PhaseError("PROBE", err)
 		} else {
@@ -133,64 +135,52 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// ── PHASE 3: TLS ─────────────────────────────────────────────────────
-	// Examines TLS certificates: expiry, self-signed status, weak protocols, and extracts
-	// Subject Alternative Names (SANs) which may reveal additional subdomains
+	// -- PHASE 3: TLS ------------------------------------------------------
 	if hasModule("tls") && len(report.ProbeResults) > 0 {
 		out.PhaseHeader("03", "TLS", "certificate analysis + SAN discovery")
-		liveHosts := probe.LiveOnly(report.ProbeResults) // Only check TLS on hosts that responded
-		tlsResults, newSubdomains := tls.Run(liveHosts, target, flagTimeout, flagThreads, flagDelay)
+		liveHosts := probe.LiveOnly(report.ProbeResults)
+		tlsResults, newSubdomains := tls.Run(liveHosts, target, flagTimeout, flagThreads, flagDelay, flagStealth)
 		report.TLSResults = tlsResults
-		// If SANs revealed new subdomains, add them to the report
 		if len(newSubdomains) > 0 {
 			out.Info(fmt.Sprintf("SAN discovery found %d additional subdomains", len(newSubdomains)))
 			report.Subdomains = append(report.Subdomains, newSubdomains...)
 		}
 		out.TLSTable(tlsResults)
-		// TLS module generates findings (expired certs, self-signed, weak protocols)
 		for _, r := range tlsResults {
 			report.Findings = append(report.Findings, r.Findings...)
 		}
 	}
 
-	// ── PHASE 4: HEADERS ─────────────────────────────────────────────────
-	// Checks for missing security headers (HSTS, CSP, X-Frame-Options, etc.)
-	// and tests CORS configuration by injecting an evil origin header
+	// -- PHASE 4: HEADERS --------------------------------------------------
 	if hasModule("headers") && len(report.ProbeResults) > 0 {
 		out.PhaseHeader("04", "HEADERS", "security header audit")
 		liveHosts := probe.LiveOnly(report.ProbeResults)
-		headerResults := headers.Run(report.ProbeResults, liveHosts, flagTimeout, flagThreads, flagDelay)
+		headerResults := headers.Run(report.ProbeResults, liveHosts, flagTimeout, flagThreads, flagDelay, flagStealth)
 		report.HeaderResults = headerResults
 		out.HeadersTable(headerResults)
-		// Headers module generates findings for missing/misconfigured headers
 		for _, r := range headerResults {
 			report.Findings = append(report.Findings, r.Findings...)
 		}
 	}
 
-	// ── PHASE 5: PATHS ───────────────────────────────────────────────────
-	// Probes for exposed sensitive files and endpoints like .env, .git, config files,
-	// admin panels, database interfaces, API docs, etc.
+	// -- PHASE 5: PATHS ----------------------------------------------------
 	if hasModule("paths") && len(report.ProbeResults) > 0 {
 		out.PhaseHeader("05", "PATHS", "exposed endpoint + file detection")
 		liveHosts := probe.LiveOnly(report.ProbeResults)
-		pathFindings := paths.Run(out, liveHosts, flagDeep, flagTimeout, flagThreads, flagDelay)
+		pathFindings := paths.Run(out, liveHosts, flagDeep, flagTimeout, flagThreads, flagDelay, flagStealth)
 		report.Findings = append(report.Findings, pathFindings...)
 		out.FindingsBlock("PATHS", pathFindings)
 	}
 
-	// ── PHASE 6: TAKEOVER ────────────────────────────────────────────────
-	// Detects subdomain takeover vulnerabilities: dead DNS records pointing to
-	// unclaimed third-party services (GitHub Pages, Heroku, AWS S3, etc.)
+	// -- PHASE 6: TAKEOVER -------------------------------------------------
 	if hasModule("takeover") && len(report.Subdomains) > 0 {
 		out.PhaseHeader("06", "TAKEOVER", "dangling CNAME subdomain takeover detection")
-		takeoverFindings := takeover.Run(out, report.Subdomains, flagTimeout, flagThreads, flagDelay)
+		takeoverFindings := takeover.Run(out, report.Subdomains, flagTimeout, flagThreads, flagDelay, flagStealth)
 		report.Findings = append(report.Findings, takeoverFindings...)
 		out.FindingsBlock("TAKEOVER", takeoverFindings)
 	}
 
-	// ── SUMMARY ──────────────────────────────────────────────────────────
-	// Calculate total duration and render the final report with all findings
+	// -- SUMMARY -----------------------------------------------------------
 	report.Duration = time.Since(startTime)
 	out.Summary(report)
 

@@ -1,7 +1,12 @@
+// Package headers audits HTTP security response headers and CORS configuration.
+// It checks for the presence of HSTS, CSP, X-Frame-Options, X-Content-Type-
+// Options, Referrer-Policy, and Permissions-Policy, and tests for CORS
+// misconfigurations including wildcard origins and origin reflection.
 package headers
 
 import (
 	"crypto/tls"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -40,7 +45,9 @@ func init() {
 	}
 }
 
-func auditURL(url string, timeout int) *output.HeaderResult {
+// auditURL fetches the given URL and inspects its response headers for
+// security-related headers and CORS misconfigurations.
+func auditURL(url string, timeout int, stealth bool) *output.HeaderResult {
 	client := &http.Client{
 		Timeout: time.Duration(timeout) * time.Second,
 		Transport: &http.Transport{
@@ -48,7 +55,6 @@ func auditURL(url string, timeout int) *output.HeaderResult {
 		},
 	}
 
-	// CORS check — inject evil origin
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return &output.HeaderResult{
@@ -57,7 +63,12 @@ func auditURL(url string, timeout int) *output.HeaderResult {
 			Error:   err.Error(),
 		}
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ANANSI-CLI/1.0)")
+
+	if stealth {
+		req.Header.Set("User-Agent", output.RandomUA())
+	} else {
+		req.Header.Set("User-Agent", output.DefaultUA)
+	}
 	req.Header.Set("Origin", "https://evil-attacker.com")
 
 	resp, err := client.Do(req)
@@ -68,9 +79,10 @@ func auditURL(url string, timeout int) *output.HeaderResult {
 			Error:   err.Error(),
 		}
 	}
-	defer resp.Body.Close()
+	// Drain and close body to allow connection reuse; limit read to 4K
+	_, _ = io.CopyN(io.Discard, resp.Body, 4096)
+	resp.Body.Close()
 
-	// Collect all security headers
 	hmap := map[string]string{}
 	for _, h := range securityHeaders {
 		hmap[h] = resp.Header.Get(h)
@@ -86,7 +98,6 @@ func auditURL(url string, timeout int) *output.HeaderResult {
 		Success: true,
 	}
 
-	// Generate findings for missing headers
 	for _, rule := range headerRules {
 		if hmap[rule.header] == "" {
 			result.Findings = append(result.Findings, output.Finding{
@@ -100,7 +111,6 @@ func auditURL(url string, timeout int) *output.HeaderResult {
 		}
 	}
 
-	// CORS findings
 	if acao == "*" {
 		result.Findings = append(result.Findings, output.Finding{
 			Severity:      output.Medium,
@@ -132,11 +142,11 @@ func auditURL(url string, timeout int) *output.HeaderResult {
 	return result
 }
 
-// Run audits security headers for all live probe results concurrently
-func Run(probeResults []output.ProbeResult, liveHosts []output.ProbeResult, timeout int, threads int, delayMs int) []output.HeaderResult {
+// Run audits security headers for all live probe results concurrently.
+func Run(probeResults []output.ProbeResult, liveHosts []output.ProbeResult, timeout int, threads int, delayMs int, stealth bool) []output.HeaderResult {
 	results := make([]output.HeaderResult, 0, len(liveHosts))
 	var mu sync.Mutex
-	sem := make(chan struct{}, threads) // Use user-defined concurrency
+	sem := make(chan struct{}, threads)
 	var wg sync.WaitGroup
 
 	for _, p := range liveHosts {
@@ -145,10 +155,11 @@ func Run(probeResults []output.ProbeResult, liveHosts []output.ProbeResult, time
 		go func(pr output.ProbeResult) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if delayMs > 0 {
-				time.Sleep(time.Duration(delayMs) * time.Millisecond)
+			delay := output.JitterDelay(delayMs, stealth)
+			if delay > 0 {
+				time.Sleep(delay)
 			}
-			r := auditURL(pr.URL, timeout)
+			r := auditURL(pr.URL, timeout, stealth)
 			if r != nil {
 				mu.Lock()
 				results = append(results, *r)

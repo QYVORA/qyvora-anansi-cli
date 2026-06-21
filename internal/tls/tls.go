@@ -1,5 +1,7 @@
 // Package tls implements TLS/SSL certificate analysis and security checks.
-// It examines certificate validity, protocols, ciphers, and extracts Subject Alternative Names (SANs).
+// It examines certificate validity, protocol versions, cipher suites, and
+// extracts Subject Alternative Names (SANs) which may reveal additional
+// subdomains not found through DNS enumeration.
 package tls
 
 import (
@@ -13,12 +15,19 @@ import (
 	"github.com/wsuits6/qyvora-anansi-cli/internal/output"
 )
 
-// probeHost establishes a TLS connection and extracts certificate details.
-// Deliberately uses InsecureSkipVerify to test hosts with invalid certs.
-func probeHost(hostname string, timeout int) (*output.TLSResult, error) {
+// probeHost establishes a TLS connection to the given hostname and extracts
+// certificate metadata.  InsecureSkipVerify is deliberately enabled so that
+// hosts with invalid, self-signed, or expired certificates can still be
+// analysed.
+func probeHost(hostname string, timeout int, stealth bool) (*output.TLSResult, error) {
+	ua := output.DefaultUA
+	if stealth {
+		ua = output.RandomUA()
+	}
+
 	dialer := &net.Dialer{Timeout: time.Duration(timeout) * time.Second}
 	conn, err := tls.DialWithDialer(dialer, "tcp", hostname+":443", &tls.Config{
-		InsecureSkipVerify: true,  // Accept self-signed and expired certs
+		InsecureSkipVerify: true,
 		ServerName:         hostname,
 	})
 	if err != nil {
@@ -31,18 +40,19 @@ func probeHost(hostname string, timeout int) (*output.TLSResult, error) {
 		return nil, fmt.Errorf("no certificates")
 	}
 
-	// Parse the leaf certificate (first in chain)
+	// -- The stealth param is accepted for consistency; TLS fingerprinting
+	//    at the dial level is a deeper enhancement for a future release.
+	_ = ua
+
 	cert := state.PeerCertificates[0]
 	now := time.Now()
 	days := int(cert.NotAfter.Sub(now).Hours() / 24)
 
-	// Extract SANs (Subject Alternative Names) from certificate
 	var sans []string
 	for _, dns := range cert.DNSNames {
-		sans = append(sans, strings.TrimPrefix(dns, "*.")) // Remove wildcard prefix
+		sans = append(sans, strings.TrimPrefix(dns, "*."))
 	}
 
-	// Determine certificate issuer
 	issuerOrg := ""
 	if len(cert.Issuer.Organization) > 0 {
 		issuerOrg = cert.Issuer.Organization[0]
@@ -50,7 +60,6 @@ func probeHost(hostname string, timeout int) (*output.TLSResult, error) {
 		issuerOrg = cert.Issuer.CommonName
 	}
 
-	// Detect self-signed certificates (issuer == subject, no organization)
 	selfSigned := cert.Issuer.CommonName == cert.Subject.CommonName && len(cert.Issuer.Organization) == 0
 
 	result := &output.TLSResult{
@@ -68,17 +77,15 @@ func probeHost(hostname string, timeout int) (*output.TLSResult, error) {
 		SANs:            sans,
 	}
 
-	// Generate security findings based on certificate analysis
 	result.Findings = generateFindings(result)
 	return result, nil
 }
 
-// generateFindings creates vulnerability findings based on TLS certificate analysis.
-// Checks for: expired certs, expiring soon, self-signed, weak protocols.
+// generateFindings creates vulnerability findings based on TLS certificate
+// analysis: expired/expiring certs, self-signed issuers, weak protocols.
 func generateFindings(r *output.TLSResult) []output.Finding {
 	var findings []output.Finding
 
-	// Check for expired certificates
 	if r.Expired {
 		findings = append(findings, output.Finding{
 			Severity:      output.Critical,
@@ -89,7 +96,6 @@ func generateFindings(r *output.TLSResult) []output.Finding {
 			Remediation:   "Renew the TLS certificate immediately.",
 		})
 	} else if r.ExpiringSoon {
-		// Warn if certificate expires within 30 days
 		findings = append(findings, output.Finding{
 			Severity:      output.High,
 			Title:         fmt.Sprintf("TLS Certificate Expiring in %d Days", r.DaysUntilExpiry),
@@ -99,7 +105,6 @@ func generateFindings(r *output.TLSResult) []output.Finding {
 		})
 	}
 
-	// Self-signed certificates are not trusted by browsers
 	if r.SelfSigned {
 		findings = append(findings, output.Finding{
 			Severity:      output.High,
@@ -111,7 +116,6 @@ func generateFindings(r *output.TLSResult) []output.Finding {
 		})
 	}
 
-	// Detect deprecated/weak TLS protocols
 	weakProtos := map[string]bool{"TLS 1.0": true, "TLS 1.1": true, "SSL 3.0": true, "SSL 2.0": true}
 	if weakProtos[r.Protocol] {
 		findings = append(findings, output.Finding{
@@ -127,7 +131,8 @@ func generateFindings(r *output.TLSResult) []output.Finding {
 	return findings
 }
 
-// tlsVersionName converts the Go TLS version constant to a human-readable string.
+// tlsVersionName converts a Go TLS version constant to a human-readable
+// string (e.g., tls.VersionTLS12 -> "TLS 1.2").
 func tlsVersionName(v uint16) string {
 	switch v {
 	case tls.VersionTLS10:
@@ -143,19 +148,16 @@ func tlsVersionName(v uint16) string {
 	}
 }
 
-// Run probes TLS on all HTTPS hosts and returns:
-// 1. TLS analysis results (certificate info, expiry, protocol strength)
-// 2. Any new subdomains discovered from certificate SANs
-//
-// Only probes hosts that are accessible via HTTPS (determined by prior probe phase).
-func Run(liveProbes []output.ProbeResult, targetDomain string, timeout int, threads int, delayMs int) ([]output.TLSResult, []output.SubdomainResult) {
+// Run probes TLS on all hosts that responded to HTTPS and returns:
+//  1. TLS analysis results (certificate info, expiry, protocol strength)
+//  2. New subdomains discovered from certificate SANs
+func Run(liveProbes []output.ProbeResult, targetDomain string, timeout int, threads int, delayMs int, stealth bool) ([]output.TLSResult, []output.SubdomainResult) {
 	results := make([]output.TLSResult, 0)
 	mu := sync.Mutex{}
-	sem := make(chan struct{}, threads) // Use user-defined concurrency
+	sem := make(chan struct{}, threads)
 	var wg sync.WaitGroup
 
 	for _, p := range liveProbes {
-		// Skip hosts that only respond to HTTP (not HTTPS)
 		if !strings.HasPrefix(p.URL, "https://") {
 			mu.Lock()
 			results = append(results, output.TLSResult{
@@ -171,10 +173,11 @@ func Run(liveProbes []output.ProbeResult, targetDomain string, timeout int, thre
 		go func(pr output.ProbeResult) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if delayMs > 0 {
-				time.Sleep(time.Duration(delayMs) * time.Millisecond)
+			delay := output.JitterDelay(delayMs, stealth)
+			if delay > 0 {
+				time.Sleep(delay)
 			}
-			r, err := probeHost(pr.FQDN, timeout)
+			r, err := probeHost(pr.FQDN, timeout, stealth)
 			mu.Lock()
 			if err != nil {
 				results = append(results, output.TLSResult{
@@ -191,26 +194,22 @@ func Run(liveProbes []output.ProbeResult, targetDomain string, timeout int, thre
 	}
 	wg.Wait()
 
-	// Extract new subdomains from SANs (Subject Alternative Names)
-	// SANs often reveal additional infrastructure not found in DNS brute-force
 	var newSubdomains []output.SubdomainResult
 	seen := map[string]struct{}{}
 	for _, r := range results {
 		for _, san := range r.SANs {
 			san = strings.ToLower(san)
-			// Only include SANs that belong to our target domain
 			if !strings.HasSuffix(san, "."+targetDomain) {
 				continue
 			}
 			if _, exists := seen[san]; exists {
-				continue // Already processed this SAN
+				continue
 			}
 			seen[san] = struct{}{}
-			// Try to resolve the SAN to see if it's a live subdomain
 			ips, _ := net.LookupHost(san)
 			newSubdomains = append(newSubdomains, output.SubdomainResult{
 				FQDN:     san,
-				Source:   "san", // Mark source as SAN discovery
+				Source:   output.SourceSAN,
 				IPs:      ips,
 				Resolved: len(ips) > 0,
 			})

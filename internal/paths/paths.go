@@ -1,3 +1,7 @@
+// Package paths probes live hosts for exposed sensitive files and endpoints
+// such as /.env, /.git/config, /admin, /api-docs, and other common targets.
+// It uses a per-host 404 baseline to reduce false positives and follows
+// redirect chains to distinguish real endpoints from root-redirects.
 package paths
 
 import (
@@ -18,7 +22,7 @@ type pathRule struct {
 	path        string
 	title       string
 	severity    string
-	captureBody bool // capture response body snippet as evidence
+	captureBody bool
 }
 
 func loadRules(filename string) []pathRule {
@@ -29,10 +33,7 @@ func loadRules(filename string) []pathRule {
 		if len(parts) < 3 {
 			continue
 		}
-		capture := false
-		if len(parts) >= 4 && parts[3] == "true" {
-			capture = true
-		}
+		capture := len(parts) >= 4 && parts[3] == "true"
 		rules = append(rules, pathRule{
 			path:        parts[0],
 			title:       parts[1],
@@ -54,7 +55,7 @@ func getBaseline(client *http.Client, baseURL string) baselineResponse {
 	if err != nil {
 		return baselineResponse{statusCode: 404}
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ANANSI-CLI/1.0)")
+	req.Header.Set("User-Agent", output.DefaultUA)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -69,13 +70,18 @@ func getBaseline(client *http.Client, baseURL string) baselineResponse {
 	}
 }
 
-func checkPath(client *http.Client, baseURL string, rule pathRule, baseline baselineResponse) *output.Finding {
-	target := strings.TrimRight(baseURL, "/") + rule.path
+func (r pathRule) checkPath(client *http.Client, baseURL string, baseline baselineResponse, stealth bool) *output.Finding {
+	target := strings.TrimRight(baseURL, "/") + r.path
 	req, err := http.NewRequest("GET", target, nil)
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ANANSI-CLI/1.0)")
+
+	if stealth {
+		req.Header.Set("User-Agent", output.RandomUA())
+	} else {
+		req.Header.Set("User-Agent", output.DefaultUA)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -83,23 +89,20 @@ func checkPath(client *http.Client, baseURL string, rule pathRule, baseline base
 	}
 	defer resp.Body.Close()
 
-	// 1. Check if status code matches common "not found" or "forbidden"
 	if resp.StatusCode == 404 || resp.StatusCode == 400 || resp.StatusCode == 410 || resp.StatusCode == 403 {
 		return nil
 	}
 
-	// 2. Compare against baseline (custom 404 handling)
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 5000)) // read enough to compare
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 5000))
 	if resp.StatusCode == baseline.statusCode && len(body) == baseline.bodyLen {
 		return nil
 	}
 
-	severity := rule.severity
-	title := rule.title
-	description := fmt.Sprintf("%s returned HTTP %d", rule.path, resp.StatusCode)
+	severity := r.severity
+	title := r.title
+	description := fmt.Sprintf("%s returned HTTP %d", r.path, resp.StatusCode)
 	evidence := fmt.Sprintf("HTTP %d at %s", resp.StatusCode, target)
 
-	// If it's a redirect, trace the landing URL to detect false positives
 	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
 		followClient := &http.Client{
 			Timeout:   client.Timeout,
@@ -107,7 +110,7 @@ func checkPath(client *http.Client, baseURL string, rule pathRule, baseline base
 		}
 		fReq, fErr := http.NewRequest("GET", target, nil)
 		if fErr == nil {
-			fReq.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ANANSI-CLI/1.0)")
+			fReq.Header.Set("User-Agent", output.DefaultUA)
 			fResp, fRespErr := followClient.Do(fReq)
 			if fRespErr == nil {
 				defer fResp.Body.Close()
@@ -123,11 +126,10 @@ func checkPath(client *http.Client, baseURL string, rule pathRule, baseline base
 					}
 				}
 
-				// If it redirects to an error page or the root/homepage, it's likely a false positive
 				if finalStatus == 404 || finalStatus == 400 || finalStatus == 410 || finalStatus == 403 || isRootRedirect {
 					severity = output.Info
-					title = "[POTENTIAL FALSE POSITIVE] " + rule.title
-					description = fmt.Sprintf("%s returned HTTP %d but redirects to %s (HTTP %d)", rule.path, resp.StatusCode, finalURL, finalStatus)
+					title = "[POTENTIAL FALSE POSITIVE] " + r.title
+					description = fmt.Sprintf("%s returned HTTP %d but redirects to %s (HTTP %d)", r.path, resp.StatusCode, finalURL, finalStatus)
 					evidence = fmt.Sprintf("Redirect: HTTP %d -> %s (HTTP %d)", resp.StatusCode, finalURL, finalStatus)
 				} else {
 					evidence = fmt.Sprintf("Redirect: HTTP %d -> %s (HTTP %d)", resp.StatusCode, finalURL, finalStatus)
@@ -136,8 +138,7 @@ func checkPath(client *http.Client, baseURL string, rule pathRule, baseline base
 		}
 	}
 
-	// Capture body snippet for critical/high hits that are not flagged as false positives
-	if severity != output.Info && rule.captureBody && (severity == output.Critical || severity == output.High) {
+	if severity != output.Info && r.captureBody && (severity == output.Critical || severity == output.High) {
 		snippet := strings.ReplaceAll(string(body), "\x00", "")
 		snippet = strings.TrimSpace(snippet)
 		if len(snippet) > 300 {
@@ -154,12 +155,22 @@ func checkPath(client *http.Client, baseURL string, rule pathRule, baseline base
 		AffectedAsset: target,
 		Description:   description,
 		Evidence:      evidence,
-		Remediation:   fmt.Sprintf("Restrict or remove %s from public access.", rule.path),
+		Remediation:   fmt.Sprintf("Restrict or remove %s from public access.", r.path),
 	}
 }
 
-// Run probes all live hosts for exposed paths
-func Run(out *output.Renderer, liveHosts []output.ProbeResult, deep bool, timeout int, threads int, delayMs int) []output.Finding {
+// hostProbeJob pairs a live host with its cached 404 baseline so that
+// the inner path checks can run against it.
+type hostProbeJob struct {
+	host     output.ProbeResult
+	baseline baselineResponse
+}
+
+// Run probes all live hosts for exposed paths and returns any findings.
+// A per-host 404 baseline is established first, then each path rule is
+// checked against the host in a single flat worker pool — avoiding the
+// nested-goroutine pattern that previously caused a race condition.
+func Run(out *output.Renderer, liveHosts []output.ProbeResult, deep bool, timeout int, threads int, delayMs int, stealth bool) []output.Finding {
 	client := &http.Client{
 		Timeout: time.Duration(timeout) * time.Second,
 		Transport: &http.Transport{
@@ -167,7 +178,7 @@ func Run(out *output.Renderer, liveHosts []output.ProbeResult, deep bool, timeou
 			DisableKeepAlives: true,
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse // don't follow redirects for path probing
+			return http.ErrUseLastResponse
 		},
 	}
 
@@ -176,53 +187,67 @@ func Run(out *output.Renderer, liveHosts []output.ProbeResult, deep bool, timeou
 		rules = append(rules, loadRules("wordlists/paths/deep.txt")...)
 	}
 
-	totalJobs := len(liveHosts) * len(rules)
+	if len(liveHosts) == 0 || len(rules) == 0 {
+		return nil
+	}
+
+	// Build a per-host baseline cache to avoid re-fetching for every rule.
+	baselineCache := make(map[string]baselineResponse, len(liveHosts))
+	for _, host := range liveHosts {
+		baselineCache[host.URL] = getBaseline(client, host.URL)
+	}
+
+	// Build flat job list: one job per (host, rule) pair.
+	type pair struct {
+		host output.ProbeResult
+		rule pathRule
+	}
+
+	var pairs []pair
+	for _, host := range liveHosts {
+		for _, rule := range rules {
+			pairs = append(pairs, pair{host, rule})
+		}
+	}
+
 	var allFindings []output.Finding
 	mu := sync.Mutex{}
-	sem := make(chan struct{}, threads) // Use user-defined concurrency
+	sem := make(chan struct{}, threads)
 	var wg sync.WaitGroup
 
 	completed := 0
-	for _, host := range liveHosts {
+	totalJobs := len(pairs)
+
+	for _, p := range pairs {
 		wg.Add(1)
-		go func(h output.ProbeResult) {
+		sem <- struct{}{}
+		go func(h output.ProbeResult, r pathRule) {
 			defer wg.Done()
+			defer func() { <-sem }()
 
-			// Get baseline concurrently under semaphore
-			sem <- struct{}{}
-			baseline := getBaseline(client, h.URL)
-			<-sem
-
-			for _, rule := range rules {
-				wg.Add(1)
-				sem <- struct{}{}
-				go func(r pathRule, bl baselineResponse) {
-					defer wg.Done()
-					defer func() { <-sem }()
-
-					if delayMs > 0 {
-						time.Sleep(time.Duration(delayMs) * time.Millisecond)
-					}
-
-					f := checkPath(client, h.URL, r, bl)
-					if f != nil {
-						mu.Lock()
-						allFindings = append(allFindings, *f)
-						mu.Unlock()
-					} else {
-						out.Verbose(fmt.Sprintf("Path not found: %s%s", h.URL, r.path))
-					}
-
-					mu.Lock()
-					completed++
-					if completed%10 == 0 || completed == totalJobs {
-						out.Progress(completed, totalJobs, "Probing Paths")
-					}
-					mu.Unlock()
-				}(rule, baseline)
+			delay := output.JitterDelay(delayMs, stealth)
+			if delay > 0 {
+				time.Sleep(delay)
 			}
-		}(host)
+
+			f := r.checkPath(client, h.URL, baselineCache[h.URL], stealth)
+			if f != nil {
+				mu.Lock()
+				allFindings = append(allFindings, *f)
+				mu.Unlock()
+			} else {
+				out.Verbose(fmt.Sprintf("Path not found: %s%s", h.URL, r.path))
+			}
+
+			mu.Lock()
+			completed++
+			if completed%10 == 0 || completed == totalJobs {
+				out.Progress(completed, totalJobs, "Probing Paths")
+			}
+			mu.Unlock()
+		}(p.host, p.rule)
 	}
 	wg.Wait()
+
 	return allFindings
 }

@@ -1,3 +1,6 @@
+// Package output implements report rendering for terminal, JSON, Markdown,
+// and HTML output formats.  The Renderer struct is the primary consumer-facing
+// API used by every scan phase to display progress and results.
 package output
 
 import (
@@ -24,11 +27,15 @@ var (
 	greenDim = color.New(color.FgGreen)
 )
 
+// Renderer manages output formatting and verbosity.  It is created once per
+// scan and passed to every module so they can display progress inline.
 type Renderer struct {
 	format  string
 	verbose bool
+	stealth bool
 }
 
+// New creates a Renderer for the given format and verbosity setting.
 func New(format string, verbose bool) *Renderer {
 	return &Renderer{
 		format:  format,
@@ -36,10 +43,18 @@ func New(format string, verbose bool) *Renderer {
 	}
 }
 
+// WithStealth returns a copy of the Renderer with stealth mode enabled.
+func (r *Renderer) WithStealth() *Renderer {
+	r.stealth = true
+	return r
+}
+
 func (r *Renderer) isQuiet() bool {
 	return r.format == "json" || r.format == "html" || r.format == "markdown"
 }
 
+// Verbose prints a message only when the --verbose flag is set and the
+// output format is terminal.
 func (r *Renderer) Verbose(msg string) {
 	if r.isQuiet() {
 		return
@@ -49,8 +64,10 @@ func (r *Renderer) Verbose(msg string) {
 	}
 }
 
+// Banner displays the ANANSI ASCII art, target, and scan start time.
+// In stealth mode the banner is skipped entirely.
 func (r *Renderer) Banner(target string) {
-	if r.isQuiet() {
+	if r.isQuiet() || r.stealth {
 		return
 	}
 	fmt.Println()
@@ -60,8 +77,8 @@ func (r *Renderer) Banner(target string) {
 	fmt.Println()
 	fmt.Println()
 	white.Println("  Attack Surface Intelligence Engine")
-	cyan.Println("  QYVORA OffSec — github.com/wsuits6/qyvora-anansi-cli")
-	fmt.Println()
+	cyan.Printf("  %s — %s\n", CompanyName, CompanyURL)
+	dim.Printf("  Built in %s\n\n", BuiltIn)
 	dim.Printf("  TARGET: ")
 	white.Println(target)
 	dim.Printf("  TIME:   ")
@@ -528,15 +545,19 @@ func (r *Renderer) renderHTML(report *Report) {
 	}
 
 	data := struct {
-		Report    *Report
-		Counts    map[string]int
-		RiskScore int
-		LiveCount int
+		Report      *Report
+		Counts      map[string]int
+		RiskScore   int
+		LiveCount   int
+		CompanyName string
+		BuiltIn     string
 	}{
-		Report:    report,
-		Counts:    counts,
-		RiskScore: riskScore,
-		LiveCount: liveCount,
+		Report:      report,
+		Counts:      counts,
+		RiskScore:   riskScore,
+		LiveCount:   liveCount,
+		CompanyName: CompanyName,
+		BuiltIn:     BuiltIn,
 	}
 
 	if err := tmpl.Execute(os.Stdout, data); err != nil {
@@ -777,7 +798,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
     <header>
         <div class="logo-section">
             <h1>ANANSI SCAN REPORT</h1>
-            <p>Attack Surface Intelligence Engine — QYVORA OffSec</p>
+            <p>Attack Surface Intelligence Engine — {{.CompanyName}}</p>
         </div>
         <div class="meta">
             <p>Target: <strong>{{.Report.Target}}</strong></p>
