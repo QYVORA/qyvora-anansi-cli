@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wsuits6/qyvora-anansi-cli/internal/output"
+	"github.com/QYVORA/qyvora-anansi-cli/internal/output"
 )
 
 // probeHost establishes a TLS connection to the given hostname and extracts

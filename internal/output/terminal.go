@@ -16,15 +16,15 @@ import (
 )
 
 var (
-	cyan     = color.New(color.FgCyan, color.Bold)
-	cyanDim  = color.New(color.FgCyan)
-	white    = color.New(color.FgWhite, color.Bold)
-	dim      = color.New(color.FgHiBlack)
-	red      = color.New(color.FgRed, color.Bold)
-	redDim   = color.New(color.FgRed)
-	orange   = color.New(color.FgYellow, color.Bold)
-	green    = color.New(color.FgGreen, color.Bold)
-	greenDim = color.New(color.FgGreen)
+	accent    = color.New(color.FgHiGreen, color.Bold)
+	accentDim = color.New(color.FgHiGreen)
+	white     = color.New(color.FgWhite, color.Bold)
+	dim       = color.New(color.FgHiBlack)
+	red       = color.New(color.FgRed, color.Bold)
+	redDim    = color.New(color.FgRed)
+	orange    = color.New(color.FgYellow, color.Bold)
+	green     = color.New(color.FgGreen, color.Bold)
+	greenDim  = color.New(color.FgGreen)
 )
 
 // Renderer manages output formatting and verbosity.  It is created once per
@@ -72,12 +72,12 @@ func (r *Renderer) Banner(target string) {
 	}
 	fmt.Println()
 	for _, line := range strings.Split(AnansiASCIIArt, "\n") {
-		cyan.Println(line)
+		accent.Println(line)
 	}
 	fmt.Println()
 	fmt.Println()
 	white.Println("  Attack Surface Intelligence Engine")
-	cyan.Printf("  %s — %s\n", CompanyName, CompanyURL)
+	accent.Printf("  %s — %s\n", CompanyName, CompanyURL)
 	dim.Printf("  Built in %s\n\n", BuiltIn)
 	dim.Printf("  TARGET: ")
 	white.Println(target)
@@ -91,7 +91,7 @@ func (r *Renderer) PhaseHeader(num, name, desc string) {
 		return
 	}
 	fmt.Println()
-	cyan.Printf("  ══ PHASE %s ── %s ", num, name)
+	accent.Printf("  ══ PHASE %s ── %s ", num, name)
 	dim.Printf("// %s\n", desc)
 	dim.Println("  " + strings.Repeat("─", 60))
 }
@@ -107,7 +107,7 @@ func (r *Renderer) Info(msg string) {
 	if r.isQuiet() {
 		return
 	}
-	cyanDim.Printf("  [*] %s\n", msg)
+	accentDim.Printf("  [*] %s\n", msg)
 }
 
 func (r *Renderer) Progress(current, total int, label string) {
@@ -121,7 +121,7 @@ func (r *Renderer) Progress(current, total int, label string) {
 		completed = width
 	}
 	bar := strings.Repeat("█", completed) + strings.Repeat("░", width-completed)
-	fmt.Printf("\r  %s [%s] %3.0f%% (%d/%d)   ", dim.Sprint(label), cyan.Sprint(bar), percent, current, total)
+	fmt.Printf("\r  %s [%s] %3.0f%% (%d/%d)   ", dim.Sprint(label), accent.Sprint(bar), percent, current, total)
 	if current == total {
 		fmt.Println()
 	}
@@ -158,7 +158,7 @@ func (r *Renderer) SubdomainTable(results []SubdomainResult) {
 	}
 
 	dim.Printf("  sources: ")
-	cyan.Printf("crt.sh=%d  ", crtsh)
+	accent.Printf("crt.sh=%d  ", crtsh)
 	dim.Printf("wordlist=%d  san=%d\n\n", wordlist, san)
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
@@ -180,7 +180,7 @@ func (r *Renderer) SubdomainTable(results []SubdomainResult) {
 
 		sourceColor := dim.Sprint(s.Source)
 		if s.Source == "crtsh" {
-			sourceColor = cyanDim.Sprint("crt.sh")
+			sourceColor = accentDim.Sprint("crt.sh")
 		} else if s.Source == "san" {
 			sourceColor = greenDim.Sprint("san")
 		} else if s.Source == "mutation" {
@@ -354,7 +354,7 @@ func (r *Renderer) HeadersTable(results []HeaderResult) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "  %-35s\t", "URL")
 	for _, h := range secHeaders {
-		fmt.Fprintf(w, "%s\t", cyan.Sprint(shortNames[h]))
+		fmt.Fprintf(w, "%s\t", accent.Sprint(shortNames[h]))
 	}
 	fmt.Fprintln(w)
 
@@ -406,7 +406,7 @@ func (r *Renderer) printFinding(f Finding) {
 	}
 	if f.Evidence != "" {
 		fmt.Printf("  %-10s ", "EVIDENCE:")
-		cyanDim.Printf("%s\n", f.Evidence)
+		accentDim.Printf("%s\n", f.Evidence)
 	}
 	if f.Remediation != "" {
 		dim.Printf("  %-10s %s\n", "FIX:", f.Remediation)
@@ -467,7 +467,7 @@ func (r *Renderer) Summary(report *Report) {
 	}
 
 	fmt.Println()
-	cyan.Println("  ══ SUMMARY ─────────────────────────────────────────────────")
+	accent.Println("  ══ SUMMARY ─────────────────────────────────────────────────")
 
 	counts := map[string]int{Critical: 0, High: 0, Medium: 0, Low: 0, Info: 0}
 	for _, f := range report.Findings {
@@ -596,16 +596,16 @@ const htmlReportTemplate = `<!DOCTYPE html>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #030712;
-            --surface: rgba(17, 24, 39, 0.7);
-            --border: rgba(255, 255, 255, 0.08);
-            --cyan: #06b6d4;
-            --blue: #3b82f6;
-            --green: #10b981;
-            --yellow: #f59e0b;
+            --bg: #000000;
+            --surface: #050505;
+            --border: rgba(171, 181, 192, 0.12);
+            --accent: #66B870;
+            --accent-rgb: 102, 184, 112;
+            --green: #66B870;
+            --yellow: #fbbf24;
             --red: #ef4444;
-            --text: #f3f4f6;
-            --text-dim: #9ca3af;
+            --text: #EEF0EE;
+            --text-dim: rgba(238, 240, 238, 0.40);
         }
         body {
             font-family: 'Outfit', sans-serif;
@@ -613,8 +613,8 @@ const htmlReportTemplate = `<!DOCTYPE html>
             color: var(--text);
             padding: 2rem;
             margin: 0;
-            background-image: radial-gradient(circle at 0% 0%, rgba(6, 182, 212, 0.05) 0%, transparent 50%),
-                              radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.05) 0%, transparent 50%);
+            background-image: radial-gradient(circle at 0% 0%, rgba(102, 184, 112, 0.05) 0%, transparent 50%),
+                              radial-gradient(circle at 100% 100%, rgba(102, 184, 112, 0.03) 0%, transparent 50%);
             background-attachment: fixed;
         }
         .container {
@@ -633,7 +633,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
             font-size: 2.2rem;
             font-weight: 800;
             letter-spacing: -0.04em;
-            background: linear-gradient(to right, var(--cyan), var(--blue));
+            background: linear-gradient(to right, var(--accent), #34d399);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin: 0;
@@ -667,7 +667,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
             font-weight: 600;
             margin-top: 0;
             margin-bottom: 1rem;
-            color: var(--cyan);
+            color: var(--accent);
             border-bottom: 1px solid var(--border);
             padding-bottom: 0.5rem;
         }
@@ -703,7 +703,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
             height: 100px;
             margin: 0 auto 1rem auto;
             border-radius: 50%;
-            background: conic-gradient(var(--cyan) calc({{.RiskScore}} * 1%), rgba(255, 255, 255, 0.05) 0);
+            background: conic-gradient(var(--accent) calc({{.RiskScore}} * 1%), rgba(238, 240, 238, 0.05) 0);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -714,7 +714,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
             width: 86px;
             height: 86px;
             border-radius: 50%;
-            background: #0d121f;
+            background: #050505;
         }
         .risk-score {
             position: absolute;
@@ -755,16 +755,16 @@ const htmlReportTemplate = `<!DOCTYPE html>
             margin-bottom: 0.5rem;
         }
         .finding-title { font-weight: 600; font-size: 1.05rem; }
-        .finding-asset { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--cyan); margin-bottom: 0.4rem; }
-        .finding-desc { font-size: 0.9rem; color: var(--text-dim); }
+        .finding-asset { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--accent); margin-bottom: 0.4rem; }
+        .finding-desc { font-size: 0.9rem; color: rgba(238, 240, 238, 0.70); }
         .finding-evidence {
-            background: #070a13;
+            background: #0d0d0d;
             border: 1px solid var(--border);
             padding: 0.75rem;
             border-radius: 6px;
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.8rem;
-            color: #10b981;
+            color: #34d399;
             white-space: pre-wrap;
             margin-top: 0.5rem;
         }
@@ -877,7 +877,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
                     <tbody>
                         {{range .Report.ProbeResults}}
                             <tr>
-                                <td class="mono"><a href="{{if .URL}}{{.URL}}{{else}}http://{{.FQDN}}{{end}}" target="_blank" style="color: var(--cyan); text-decoration: none;">{{if .URL}}{{.URL}}{{else}}{{.FQDN}}{{end}}</a></td>
+                                <td class="mono"><a href="{{if .URL}}{{.URL}}{{else}}http://{{.FQDN}}{{end}}" target="_blank" style="color: var(--accent); text-decoration: none; border-bottom: 1px dotted rgba(102, 184, 112, 0.3);">{{if .URL}}{{.URL}}{{else}}{{.FQDN}}{{end}}</a></td>
                                 <td>
                                     {{if .IsAlive}}
                                         <span style="color: {{if ge .StatusCode 400}}var(--red){{else if ge .StatusCode 300}}var(--yellow){{else}}var(--green){{end}}; font-weight: bold;">{{.StatusCode}}</span>

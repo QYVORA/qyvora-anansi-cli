@@ -10,13 +10,13 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"github.com/wsuits6/qyvora-anansi-cli/internal/discovery"
-	"github.com/wsuits6/qyvora-anansi-cli/internal/headers"
-	"github.com/wsuits6/qyvora-anansi-cli/internal/output"
-	"github.com/wsuits6/qyvora-anansi-cli/internal/paths"
-	"github.com/wsuits6/qyvora-anansi-cli/internal/probe"
-	"github.com/wsuits6/qyvora-anansi-cli/internal/takeover"
-	"github.com/wsuits6/qyvora-anansi-cli/internal/tls"
+	"github.com/QYVORA/qyvora-anansi-cli/internal/discovery"
+	"github.com/QYVORA/qyvora-anansi-cli/internal/headers"
+	"github.com/QYVORA/qyvora-anansi-cli/internal/output"
+	"github.com/QYVORA/qyvora-anansi-cli/internal/paths"
+	"github.com/QYVORA/qyvora-anansi-cli/internal/probe"
+	"github.com/QYVORA/qyvora-anansi-cli/internal/takeover"
+	"github.com/QYVORA/qyvora-anansi-cli/internal/tls"
 )
 
 var (

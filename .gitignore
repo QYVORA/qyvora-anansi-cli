@@ -2,6 +2,9 @@
 anansi
 anansi.exe
 
+# Pre-built release binaries
+releases/
+
 # Build artifacts
 *.o
 *.out

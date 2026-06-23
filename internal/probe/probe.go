@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wsuits6/qyvora-anansi-cli/internal/assets"
-	"github.com/wsuits6/qyvora-anansi-cli/internal/output"
+	"github.com/QYVORA/qyvora-anansi-cli/internal/assets"
+	"github.com/QYVORA/qyvora-anansi-cli/internal/output"
 )
 
 var techHeaders []string
