@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/QYVORA/qyvora-anansi-cli/internal/discovery"
 	"github.com/QYVORA/qyvora-anansi-cli/internal/headers"
+	"github.com/QYVORA/qyvora-anansi-cli/internal/osint"
 	"github.com/QYVORA/qyvora-anansi-cli/internal/output"
 	"github.com/QYVORA/qyvora-anansi-cli/internal/paths"
 	"github.com/QYVORA/qyvora-anansi-cli/internal/probe"
@@ -63,7 +64,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&flagDeep, "deep", false, "Enable deep scan (larger wordlist, more path probing)")
 	rootCmd.Flags().StringVar(&flagOut, "out", "terminal", "Output format: terminal | json | markdown | html")
 	rootCmd.Flags().IntVar(&flagTimeout, "timeout", 5, "Per-request timeout in seconds")
-	rootCmd.Flags().StringSliceVar(&flagModules, "modules", []string{"discovery", "probe", "tls", "headers", "paths", "takeover"}, "Modules to run (comma-separated)")
+	rootCmd.Flags().StringSliceVar(&flagModules, "modules", []string{"discovery", "probe", "tls", "headers", "paths", "takeover", "osint"}, "Modules to run (comma-separated)")
 	rootCmd.Flags().StringVarP(&flagWordlist, "wordlist", "w", "", "Path to custom subdomain wordlist")
 	rootCmd.Flags().IntVarP(&flagThreads, "threads", "t", 50, "Number of concurrent threads")
 	rootCmd.Flags().BoolVarP(&flagVerbose, "verbose", "v", false, "Show all results including not-found/failed items")
@@ -178,6 +179,14 @@ func runScan(cmd *cobra.Command, args []string) error {
 		takeoverFindings := takeover.Run(out, report.Subdomains, flagTimeout, flagThreads, flagDelay, flagStealth)
 		report.Findings = append(report.Findings, takeoverFindings...)
 		out.FindingsBlock("TAKEOVER", takeoverFindings)
+	}
+
+	// -- PHASE 7: OSINT ----------------------------------------------------
+	if hasModule("osint") {
+		out.PhaseHeader("07", "OSINT", "organisation recon — emails, phones, WHOIS, employees")
+		osintResults := osint.Run(out, report.ProbeResults, target, flagTimeout, flagThreads, flagDelay, flagStealth)
+		report.OSINTResults = osintResults
+		out.OSINTTable(osintResults)
 	}
 
 	// -- SUMMARY -----------------------------------------------------------

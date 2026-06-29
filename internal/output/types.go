@@ -45,6 +45,16 @@ type Finding struct {
 	Remediation   string
 }
 
+// OSINTResult holds a single piece of open-source intelligence discovered
+// about the target organisation: emails, phone numbers, employee names,
+// social media handles, or organisational metadata.
+type OSINTResult struct {
+	Category string // "email", "phone", "employee", "org"
+	Value    string
+	Source   string // e.g. WHOIS, page URL, certificate
+	Context  string // surrounding text or label
+}
+
 // Report is the full scan result object. It is populated incrementally by each
 // scan phase and rendered at the end in the chosen output format.
 type Report struct {
@@ -56,6 +66,7 @@ type Report struct {
 	TLSResults    []TLSResult
 	HeaderResults []HeaderResult
 	Findings      []Finding
+	OSINTResults  []OSINTResult
 }
 
 // SubdomainResult holds the outcome of a single subdomain resolution attempt.

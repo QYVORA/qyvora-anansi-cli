@@ -91,9 +91,7 @@ func (r *Renderer) PhaseHeader(num, name, desc string) {
 		return
 	}
 	fmt.Println()
-	accent.Printf("  ══ PHASE %s ── %s ", num, name)
-	dim.Printf("// %s\n", desc)
-	dim.Println("  " + strings.Repeat("─", 60))
+	accent.Printf("  [+] PHASE %s: %s\n", num, name)
 }
 
 func (r *Renderer) PhaseError(phase string, err error) {
@@ -162,9 +160,6 @@ func (r *Renderer) SubdomainTable(results []SubdomainResult) {
 	dim.Printf("wordlist=%d  san=%d\n\n", wordlist, san)
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-	fmt.Fprint(w, dim.Sprint("  SUBDOMAIN\tIP\tSOURCE\tSTATUS\n"))
-	fmt.Fprint(w, dim.Sprint("  "+strings.Repeat("─", 40)+"\t"+strings.Repeat("─", 16)+"\t"+strings.Repeat("─", 8)+"\t"+strings.Repeat("─", 6)+"\n"))
-
 	for _, s := range displayResults {
 		ip := "—"
 		if len(s.IPs) > 0 {
@@ -216,10 +211,6 @@ func (r *Renderer) ProbeTable(results []ProbeResult) {
 	}
 	dim.Printf("  live: %d / %d\n\n", live, len(results))
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-	fmt.Fprint(w, dim.Sprint("  URL\tCODE\tSERVER\tTITLE\n"))
-	fmt.Fprint(w, dim.Sprint("  "+strings.Repeat("─", 45)+"\t"+strings.Repeat("─", 6)+"\t"+strings.Repeat("─", 20)+"\t"+strings.Repeat("─", 30)+"\n"))
-
 	for _, p := range displayResults {
 		codeStr := "—"
 		codeColor := dim.Sprint(codeStr)
@@ -256,9 +247,8 @@ func (r *Renderer) ProbeTable(results []ProbeResult) {
 			url = p.FQDN
 		}
 
-		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", url, codeColor, server, dim.Sprint(title))
+		accentDim.Printf("  [+] %s (%s, %s)\n", url, codeColor, server)
 	}
-	w.Flush()
 	fmt.Println()
 }
 
@@ -273,22 +263,9 @@ func (r *Renderer) TLSTable(results []TLSResult) {
 		}
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-	fmt.Fprint(w, dim.Sprint("  HOSTNAME\tPROTO\tEXPIRY\tISSUER\n"))
-	fmt.Fprint(w, dim.Sprint("  "+strings.Repeat("─", 30)+"\t"+strings.Repeat("─", 8)+"\t"+strings.Repeat("─", 10)+"\t"+strings.Repeat("─", 20)+"\n"))
-
 	for _, t := range displayResults {
 		if !t.Supported {
-			errStr := t.Error
-			if len(errStr) > 25 {
-				errStr = errStr[:22] + "..."
-			}
-			fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n",
-				t.Hostname,
-				dim.Sprint("—"),
-				redDim.Sprint("FAILED"),
-				dim.Sprint(errStr),
-			)
+			redDim.Printf("  [-] %s — TLS failed: %s\n", t.Hostname, t.Error)
 			continue
 		}
 
@@ -307,18 +284,11 @@ func (r *Renderer) TLSTable(results []TLSResult) {
 
 		selfSignedFlag := ""
 		if t.SelfSigned {
-			selfSignedFlag = red.Sprint(" [SELF]")
+			selfSignedFlag = red.Sprint(" self-signed")
 		}
 
-		fmt.Fprintf(w, "  %s\t%s\t%s\t%s%s\n",
-			t.Hostname,
-			dim.Sprint(t.Protocol),
-			expiryColor,
-			dim.Sprint(issuer),
-			selfSignedFlag,
-		)
+		accentDim.Printf("  [+] %s — %s, expires %s%s\n", t.Hostname, t.Protocol, expiryColor, selfSignedFlag)
 	}
-	w.Flush()
 	fmt.Println()
 }
 
@@ -333,52 +303,29 @@ func (r *Renderer) HeadersTable(results []HeaderResult) {
 		}
 	}
 
-	secHeaders := []string{
-		"strict-transport-security",
-		"content-security-policy",
-		"x-frame-options",
-		"x-content-type-options",
-		"referrer-policy",
-		"permissions-policy",
-	}
-
-	shortNames := map[string]string{
-		"strict-transport-security": "HSTS",
-		"content-security-policy":   "CSP",
-		"x-frame-options":           "XFO",
-		"x-content-type-options":    "XCTO",
-		"referrer-policy":           "RP",
-		"permissions-policy":        "PP",
-	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "  %-35s\t", "URL")
-	for _, h := range secHeaders {
-		fmt.Fprintf(w, "%s\t", accent.Sprint(shortNames[h]))
-	}
-	fmt.Fprintln(w)
-
 	for _, hr := range displayResults {
-		fmt.Fprintf(w, "  %-35s\t", hr.URL)
 		if !hr.Success {
-			fmt.Fprintf(w, "%s\t", redDim.Sprint("FAILED"))
-			for i := 1; i < len(secHeaders); i++ {
-				fmt.Fprintf(w, "—\t")
-			}
-			fmt.Fprintln(w)
+			redDim.Printf("  [-] %s — header check failed\n", hr.URL)
 			continue
 		}
-		for _, h := range secHeaders {
-			val, exists := hr.Headers[h]
-			if exists && val != "" {
-				fmt.Fprintf(w, "%s\t", green.Sprint("●"))
+
+		present := []string{}
+		missing := []string{}
+		for _, h := range []string{"strict-transport-security", "content-security-policy", "x-frame-options", "x-content-type-options", "referrer-policy", "permissions-policy"} {
+			if val, ok := hr.Headers[h]; ok && val != "" {
+				present = append(present, shortName(h))
 			} else {
-				fmt.Fprintf(w, "%s\t", red.Sprint("●"))
+				missing = append(missing, shortName(h))
 			}
 		}
-		fmt.Fprintln(w)
+
+		msg := fmt.Sprintf("  [+] %s", hr.URL)
+		if len(missing) > 0 {
+			dim.Printf("%s — missing: %s\n", msg, strings.Join(missing, ", "))
+		} else {
+			accentDim.Printf("%s — all headers present\n", msg)
+		}
 	}
-	w.Flush()
 	fmt.Println()
 }
 
@@ -387,30 +334,63 @@ func (r *Renderer) FindingsBlock(phase string, findings []Finding) {
 		return
 	}
 	if len(findings) == 0 {
-		dim.Printf("  no findings from %s\n", phase)
+		dim.Printf("  [*] no findings from %s\n", phase)
 		return
 	}
 
 	for _, f := range findings {
-		fmt.Println()
 		r.printFinding(f)
 	}
 }
 
 func (r *Renderer) printFinding(f Finding) {
-	sevColor := severityColor(f.Severity)
-	fmt.Printf("  %s  %s\n", sevColor(fmt.Sprintf("[%-8s]", f.Severity)), white.Sprint(f.Title))
-	dim.Printf("  %-10s %s\n", "ASSET:", f.AffectedAsset)
-	if f.Description != "" {
-		dim.Printf("  %-10s %s\n", "DESC:", f.Description)
-	}
-	if f.Evidence != "" {
-		fmt.Printf("  %-10s ", "EVIDENCE:")
-		accentDim.Printf("%s\n", f.Evidence)
+	sev := f.Severity
+	prefix := "[*]"
+	switch sev {
+	case Critical:
+		red.Printf("  [!] %s — %s\n", f.Title, f.AffectedAsset)
+	case High:
+		orange.Printf("  [!] %s — %s\n", f.Title, f.AffectedAsset)
+	case Medium:
+		color.New(color.FgYellow).Printf("  [!] %s — %s\n", f.Title, f.AffectedAsset)
+	default:
+		dim.Printf("  %s %s — %s\n", prefix, f.Title, f.AffectedAsset)
 	}
 	if f.Remediation != "" {
-		dim.Printf("  %-10s %s\n", "FIX:", f.Remediation)
+		dim.Printf("       fix: %s\n", f.Remediation)
 	}
+}
+
+func (r *Renderer) OSINTTable(results []OSINTResult) {
+	if r.isQuiet() {
+		return
+	}
+	if len(results) == 0 {
+		dim.Println("  [*] no OSINT data discovered")
+		return
+	}
+
+	for _, res := range results {
+		prefix := "[*]"
+		val := res.Value
+		if len(val) > 60 {
+			val = val[:57] + "..."
+		}
+
+		switch res.Category {
+		case "email":
+			accentDim.Printf("  [+] %s (%s)\n", val, res.Source)
+		case "phone":
+			orange.Printf("  [+] %s (%s)\n", val, res.Source)
+		case "employee":
+			green.Printf("  [+] Employee: %s (%s)\n", val, res.Source)
+		case "org":
+			white.Printf("  %s Org: %s (%s)\n", prefix, val, res.Source)
+		default:
+			dim.Printf("  %s %s: %s (%s)\n", prefix, res.Category, val, res.Source)
+		}
+	}
+	fmt.Println()
 }
 
 func (r *Renderer) Summary(report *Report) {
@@ -467,7 +447,8 @@ func (r *Renderer) Summary(report *Report) {
 	}
 
 	fmt.Println()
-	accent.Println("  ══ SUMMARY ─────────────────────────────────────────────────")
+	fmt.Println()
+	accent.Println("  [+] SUMMARY")
 
 	counts := map[string]int{Critical: 0, High: 0, Medium: 0, Low: 0, Info: 0}
 	for _, f := range report.Findings {
@@ -498,25 +479,20 @@ func (r *Renderer) Summary(report *Report) {
 	fmt.Printf("  risk score  %s\n", riskDisplay)
 	fmt.Println()
 
-	fmt.Printf("  findings    ")
-	red.Printf("CRIT:%d  ", counts[Critical])
-	orange.Printf("HIGH:%d  ", counts[High])
-	color.New(color.FgYellow).Printf("MED:%d  ", counts[Medium])
-	dim.Printf("LOW:%d  INFO:%d\n", counts[Low], counts[Info])
+	findingStr := fmt.Sprintf("  findings    CRIT:%d  HIGH:%d  MED:%d  LOW:%d  INFO:%d",
+		counts[Critical], counts[High], counts[Medium], counts[Low], counts[Info])
+	dim.Println(findingStr)
 
 	if counts[Critical]+counts[High] > 0 {
 		fmt.Println()
-		red.Println("  ── HIGH PRIORITY FINDINGS ──────────────────────────────────")
+		red.Println("  [!] HIGH PRIORITY FINDINGS")
 		for _, f := range report.Findings {
 			if f.Severity == Critical || f.Severity == High {
 				r.printFinding(f)
-				fmt.Println()
 			}
 		}
 	}
 
-	fmt.Println()
-	dim.Println("  ── END OF REPORT ───────────────────────────────────────────")
 	fmt.Println()
 }
 
@@ -563,6 +539,21 @@ func (r *Renderer) renderHTML(report *Report) {
 	if err := tmpl.Execute(os.Stdout, data); err != nil {
 		fmt.Fprintf(os.Stderr, "Error rendering HTML report: %s\n", err)
 	}
+}
+
+func shortName(header string) string {
+	m := map[string]string{
+		"strict-transport-security": "HSTS",
+		"content-security-policy":   "CSP",
+		"x-frame-options":           "XFO",
+		"x-content-type-options":    "XCTO",
+		"referrer-policy":           "RP",
+		"permissions-policy":        "PP",
+	}
+	if v, ok := m[header]; ok {
+		return v
+	}
+	return header
 }
 
 func severityColor(sev string) func(string, ...interface{}) string {
