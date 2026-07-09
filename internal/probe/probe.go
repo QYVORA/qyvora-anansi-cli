@@ -152,9 +152,9 @@ func detectTech(headers http.Header, body []byte) []string {
 func probeHost(client *http.Client, fqdn string, ports []string, delayMs int, stealth bool) []*output.ProbeResult {
 	var results []*output.ProbeResult
 	for _, port := range ports {
-		delay := output.JitterDelay(delayMs, stealth)
-		if delay > 0 {
-			time.Sleep(delay)
+		j := output.JitterDelay(delayMs, stealth)
+		if j > 0 {
+			time.Sleep(j)
 		}
 
 		var schemes []string

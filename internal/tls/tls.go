@@ -19,12 +19,7 @@ import (
 // certificate metadata.  InsecureSkipVerify is deliberately enabled so that
 // hosts with invalid, self-signed, or expired certificates can still be
 // analysed.
-func probeHost(hostname string, timeout int, stealth bool) (*output.TLSResult, error) {
-	ua := output.DefaultUA
-	if stealth {
-		ua = output.RandomUA()
-	}
-
+func probeHost(hostname string, timeout int) (*output.TLSResult, error) {
 	dialer := &net.Dialer{Timeout: time.Duration(timeout) * time.Second}
 	conn, err := tls.DialWithDialer(dialer, "tcp", hostname+":443", &tls.Config{
 		InsecureSkipVerify: true,
@@ -39,10 +34,6 @@ func probeHost(hostname string, timeout int, stealth bool) (*output.TLSResult, e
 	if len(state.PeerCertificates) == 0 {
 		return nil, fmt.Errorf("no certificates")
 	}
-
-	// -- The stealth param is accepted for consistency; TLS fingerprinting
-	//    at the dial level is a deeper enhancement for a future release.
-	_ = ua
 
 	cert := state.PeerCertificates[0]
 	now := time.Now()
@@ -177,7 +168,7 @@ func Run(liveProbes []output.ProbeResult, targetDomain string, timeout int, thre
 			if delay > 0 {
 				time.Sleep(delay)
 			}
-			r, err := probeHost(pr.FQDN, timeout, stealth)
+			r, err := probeHost(pr.FQDN, timeout)
 			mu.Lock()
 			if err != nil {
 				results = append(results, output.TLSResult{
