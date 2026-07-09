@@ -24,18 +24,19 @@ import (
 )
 
 var (
-	flagDeep      bool
-	flagOut       string
-	flagTimeout   int
-	flagModules   []string
-	flagWordlist  string
-	flagThreads   int
-	flagVerbose   bool
-	flagRecursive bool
-	flagMutate    bool
-	flagDelay     int
-	flagPorts     []string
-	flagStealth   bool
+	flagDeep        bool
+	flagOut         string
+	flagOutputFile  string
+	flagTimeout     int
+	flagModules     []string
+	flagWordlist    string
+	flagThreads     int
+	flagVerbose     bool
+	flagRecursive   bool
+	flagMutate      bool
+	flagDelay       int
+	flagPorts       []string
+	flagStealth     bool
 )
 
 // rootCmd is the main Cobra command.  It requires exactly one argument:
@@ -76,6 +77,7 @@ func init() {
 	rootCmd.Flags().IntVar(&flagDelay, "delay", 0, "Delay between requests in ms for rate limiting")
 	rootCmd.Flags().StringSliceVarP(&flagPorts, "ports", "p", []string{"80", "443"}, "Ports to probe (comma-separated)")
 	rootCmd.Flags().BoolVar(&flagStealth, "stealth", false, "Enable stealth mode: random UA, jitter, skip crt.sh, reduced concurrency")
+	rootCmd.Flags().StringVar(&flagOutputFile, "output-file", "", "Write output to file instead of stdout")
 }
 
 // hasModule reports whether the given module name is present in the
@@ -221,7 +223,21 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// -- SUMMARY -----------------------------------------------------------
 	report.Duration = time.Since(startTime)
-	out.Summary(report)
+
+	if flagOutputFile != "" {
+		f, err := os.Create(flagOutputFile)
+		if err != nil {
+			return fmt.Errorf("creating output file: %w", err)
+		}
+		defer f.Close()
+		oldStdout := os.Stdout
+		os.Stdout = f
+		out.Summary(report)
+		os.Stdout = oldStdout
+		out.Info(fmt.Sprintf("Report written to %s", flagOutputFile))
+	} else {
+		out.Summary(report)
+	}
 
 	return nil
 }

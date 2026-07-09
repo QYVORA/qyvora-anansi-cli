@@ -30,9 +30,10 @@ var (
 // Renderer manages output formatting and verbosity.  It is created once per
 // scan and passed to every module so they can display progress inline.
 type Renderer struct {
-	format  string
-	verbose bool
-	stealth bool
+	format   string
+	verbose  bool
+	stealth  bool
+	filePath string
 }
 
 // New creates a Renderer for the given format and verbosity setting.
@@ -46,6 +47,12 @@ func New(format string, verbose bool) *Renderer {
 // WithStealth returns a copy of the Renderer with stealth mode enabled.
 func (r *Renderer) WithStealth() *Renderer {
 	r.stealth = true
+	return r
+}
+
+// WithOutputFile sets a file path for writing the final report.
+func (r *Renderer) WithOutputFile(path string) *Renderer {
+	r.filePath = path
 	return r
 }
 
