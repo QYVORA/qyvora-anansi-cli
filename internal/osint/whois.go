@@ -40,6 +40,11 @@ type whoisContact struct {
 
 func whoisLookup(domain string) (whoisContact, []output.OSINTResult) {
 	var contacts whoisContact
+
+	// WHOIS queries are sent over plain TCP (port 43) without encryption.
+	// Any data exchanged — including emails, phone numbers, and org names —
+	// is visible to network observers. Do not run WHOIS lookups over
+	// untrusted networks if the results are sensitive.
 	var results []output.OSINTResult
 
 	server := resolveWhoisServer(domain)

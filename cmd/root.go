@@ -4,6 +4,7 @@ package cmd
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -95,7 +96,21 @@ func runScan(cmd *cobra.Command, args []string) error {
 	target = strings.Split(target, "/")[0]
 
 	if target == "" {
-		return fmt.Errorf("invalid target")
+		return fmt.Errorf("invalid target: empty after parsing")
+	}
+
+	// Basic DNS-label validation: reject IPs, empty labels, and overly long domains.
+	if net.ParseIP(target) != nil {
+		return fmt.Errorf("invalid target: use a domain name, not an IP address (%s)", target)
+	}
+	labels := strings.Split(target, ".")
+	for _, lbl := range labels {
+		if lbl == "" {
+			return fmt.Errorf("invalid target: malformed domain '%s' (empty label)", target)
+		}
+	}
+	if len(target) > 253 {
+		return fmt.Errorf("invalid target: domain exceeds 253 characters (%d)", len(target))
 	}
 
 	startTime := time.Now()
