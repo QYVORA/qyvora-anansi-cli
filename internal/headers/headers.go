@@ -24,30 +24,36 @@ type headerRule struct {
 	remediation string
 }
 
-var securityHeaders []string
-var headerRules []headerRule
+var (
+	loadRulesOnce   sync.Once
+	securityHeaders []string
+	headerRules     []headerRule
+)
 
-func init() {
-	lines := assets.LoadData("wordlists/headers/rules.txt")
-	for _, line := range lines {
-		parts := strings.Split(line, "|")
-		if len(parts) == 5 {
-			rule := headerRule{
-				header:      parts[0],
-				title:       parts[1],
-				severity:    parts[2],
-				description: parts[3],
-				remediation: parts[4],
+func loadHeaderRules() {
+	loadRulesOnce.Do(func() {
+		lines := assets.LoadData("wordlists/headers/rules.txt")
+		for _, line := range lines {
+			parts := strings.Split(line, "|")
+			if len(parts) == 5 {
+				rule := headerRule{
+					header:      parts[0],
+					title:       parts[1],
+					severity:    parts[2],
+					description: parts[3],
+					remediation: parts[4],
+				}
+				headerRules = append(headerRules, rule)
+				securityHeaders = append(securityHeaders, rule.header)
 			}
-			headerRules = append(headerRules, rule)
-			securityHeaders = append(securityHeaders, rule.header)
 		}
-	}
+	})
 }
 
 // auditURL fetches the given URL and inspects its response headers for
 // security-related headers and CORS misconfigurations.
 func auditURL(url string, timeout int, stealth bool) *output.HeaderResult {
+	loadHeaderRules()
 	client := &http.Client{
 		Timeout: time.Duration(timeout) * time.Second,
 		Transport: &http.Transport{

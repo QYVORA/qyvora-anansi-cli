@@ -24,23 +24,29 @@ type serviceFingerprint struct {
 	bodyMatch   string
 }
 
-var fingerprints []serviceFingerprint
+var (
+	loadFingerprintsOnce sync.Once
+	fingerprints         []serviceFingerprint
+)
 
-func init() {
-	lines := assets.LoadData("wordlists/takeover/fingerprints.txt")
-	for _, line := range lines {
-		parts := strings.Split(line, "|")
-		if len(parts) == 3 {
-			fingerprints = append(fingerprints, serviceFingerprint{
-				name:        parts[0],
-				cnameSuffix: parts[1],
-				bodyMatch:   parts[2],
-			})
+func loadTakeoverFingerprints() {
+	loadFingerprintsOnce.Do(func() {
+		lines := assets.LoadData("wordlists/takeover/fingerprints.txt")
+		for _, line := range lines {
+			parts := strings.Split(line, "|")
+			if len(parts) == 3 {
+				fingerprints = append(fingerprints, serviceFingerprint{
+					name:        parts[0],
+					cnameSuffix: parts[1],
+					bodyMatch:   parts[2],
+				})
+			}
 		}
-	}
+	})
 }
 
 func checkTakeover(client *http.Client, subdomain string, deadCNAMEs []string, stealth bool) *output.Finding {
+	loadTakeoverFingerprints()
 	for _, cname := range deadCNAMEs {
 		cnameLower := strings.ToLower(cname)
 		for _, fp := range fingerprints {

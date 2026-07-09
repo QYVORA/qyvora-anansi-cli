@@ -16,10 +16,15 @@ import (
 	"github.com/QYVORA/qyvora-anansi-cli/internal/output"
 )
 
-var techHeaders []string
+var (
+	techHeadersOnce sync.Once
+	techHeaders     []string
+)
 
-func init() {
-	techHeaders = assets.LoadData("wordlists/probe/tech_headers.txt")
+func loadTechHeaders() {
+	techHeadersOnce.Do(func() {
+		techHeaders = assets.LoadData("wordlists/probe/tech_headers.txt")
+	})
 }
 
 // newClient creates an HTTP client configured for security scanning.
@@ -80,6 +85,7 @@ func probeURL(client *http.Client, url string, stealth bool) *output.ProbeResult
 		}
 	}
 
+	loadTechHeaders()
 	tech := map[string]string{}
 	for _, h := range techHeaders {
 		if v := resp.Header.Get(h); v != "" {
