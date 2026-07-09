@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QYVORA/qyvora-anansi-cli/internal/assets"
@@ -127,7 +128,7 @@ func resolveMany(jobs []resolveJob, results *[]output.SubdomainResult, threads, 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, threads)
 	mu := sync.Mutex{}
-	completed := 0
+	var completed atomic.Int64
 
 	out.Info(fmt.Sprintf("Resolving %d candidates with %d threads...", len(jobs), threads))
 
@@ -161,9 +162,9 @@ func resolveMany(jobs []resolveJob, results *[]output.SubdomainResult, threads, 
 
 			mu.Lock()
 			*results = append(*results, result)
-			completed++
-			if completed%10 == 0 || completed == len(jobs) {
-				out.Progress(completed, len(jobs), label)
+			c := completed.Add(1)
+			if c%10 == 0 || c == int64(len(jobs)) {
+				out.Progress(int(c), len(jobs), label)
 			}
 			mu.Unlock()
 		}(j)

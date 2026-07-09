@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QYVORA/qyvora-anansi-cli/internal/assets"
@@ -142,7 +143,7 @@ func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int,
 	sem := make(chan struct{}, threads)
 	var wg sync.WaitGroup
 
-	completed := 0
+	var completed atomic.Int64
 	for _, s := range candidates {
 		wg.Add(1)
 		sem <- struct{}{}
@@ -162,8 +163,8 @@ func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int,
 			if len(deadCNAMEs) == 0 {
 				out.Verbose(fmt.Sprintf("Subdomain has no dead CNAMEs: %s", sub.FQDN))
 				mu.Lock()
-				completed++
-				out.Progress(completed, len(candidates), "Takeover check")
+				c := completed.Add(1)
+				out.Progress(int(c), len(candidates), "Takeover check")
 				mu.Unlock()
 				return
 			}
@@ -176,8 +177,8 @@ func Run(out *output.Renderer, subdomains []output.SubdomainResult, timeout int,
 				out.Verbose(fmt.Sprintf("Subdomain not vulnerable to takeover: %s (%s)", sub.FQDN, strings.Join(deadCNAMEs, ", ")))
 			}
 			mu.Lock()
-			completed++
-			out.Progress(completed, len(candidates), "Takeover check")
+			c := completed.Add(1)
+			out.Progress(int(c), len(candidates), "Takeover check")
 			mu.Unlock()
 		}(s)
 	}

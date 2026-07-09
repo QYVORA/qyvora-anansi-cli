@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QYVORA/qyvora-anansi-cli/internal/assets"
@@ -196,7 +197,7 @@ func Run(out *output.Renderer, hosts []string, timeout int, threads int, ports [
 	sem := make(chan struct{}, threads)
 	var wg sync.WaitGroup
 
-	completed := 0
+	var completed atomic.Int64
 	for _, host := range hosts {
 		wg.Add(1)
 		sem <- struct{}{}
@@ -208,9 +209,9 @@ func Run(out *output.Renderer, hosts []string, timeout int, threads int, ports [
 			for _, r := range rs {
 				results = append(results, *r)
 			}
-			completed++
-			if completed%5 == 0 || completed == len(hosts) {
-				out.Progress(completed, len(hosts), "Probing")
+			c := completed.Add(1)
+			if c%5 == 0 || c == int64(len(hosts)) {
+				out.Progress(int(c), len(hosts), "Probing")
 			}
 			mu.Unlock()
 		}(host)
