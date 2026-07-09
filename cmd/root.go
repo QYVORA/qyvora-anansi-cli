@@ -3,9 +3,11 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
 	"strings"
 	"time"
 
@@ -113,6 +115,9 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid target: domain exceeds 253 characters (%d)", len(target))
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer stop()
+
 	startTime := time.Now()
 	out := output.New(flagOut, flagVerbose)
 	if flagStealth {
@@ -123,6 +128,16 @@ func runScan(cmd *cobra.Command, args []string) error {
 		Target:    target,
 		StartedAt: startTime,
 	}
+
+	go func() {
+		<-ctx.Done()
+		report.Duration = time.Since(startTime)
+		report.Target = target
+		out.Banner(target)
+		out.Info("Scan interrupted by user. Printing partial results...")
+		out.Summary(report)
+		os.Exit(130)
+	}()
 
 	out.Banner(target)
 
