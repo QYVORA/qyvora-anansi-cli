@@ -327,7 +327,6 @@ func runMutation(results []output.SubdomainResult, target string, threads, timeo
 // resolved prefixes: hyphenated common words, number increments, and
 // cross-combinations of discovered prefixes.
 func MutateSubdomains(resolved []string, target string) []string {
-	var mutated []string
 	prefixes := make([]string, 0)
 	for _, fqdn := range resolved {
 		prefix := strings.TrimSuffix(fqdn, "."+target)
@@ -372,6 +371,7 @@ func MutateSubdomains(resolved []string, target string) []string {
 		}
 	}
 
+	mutated := make([]string, 0, len(seen))
 	for m := range seen {
 		mutated = append(mutated, m+"."+target)
 	}

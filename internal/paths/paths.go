@@ -28,7 +28,10 @@ type pathRule struct {
 
 func loadRules(filename string) []pathRule {
 	lines := assets.LoadData(filename)
-	var rules []pathRule
+	if len(lines) == 0 {
+		return nil
+	}
+	rules := make([]pathRule, 0, len(lines))
 	for _, line := range lines {
 		parts := strings.Split(line, "|")
 		if len(parts) < 3 {
@@ -160,13 +163,6 @@ func (r pathRule) checkPath(client *http.Client, baseURL string, baseline baseli
 	}
 }
 
-// hostProbeJob pairs a live host with its cached 404 baseline so that
-// the inner path checks can run against it.
-type hostProbeJob struct {
-	host     output.ProbeResult
-	baseline baselineResponse
-}
-
 // Run probes all live hosts for exposed paths and returns any findings.
 // A per-host 404 baseline is established first, then each path rule is
 // checked against the host in a single flat worker pool — avoiding the
@@ -178,7 +174,7 @@ func Run(out *output.Renderer, liveHosts []output.ProbeResult, deep bool, timeou
 			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 			DisableKeepAlives: true,
 		},
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}

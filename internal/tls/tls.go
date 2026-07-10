@@ -39,7 +39,7 @@ func probeHost(hostname string, timeout int) (*output.TLSResult, error) {
 	now := time.Now()
 	days := int(cert.NotAfter.Sub(now).Hours() / 24)
 
-	var sans []string
+	sans := make([]string, 0, len(cert.DNSNames))
 	for _, dns := range cert.DNSNames {
 		sans = append(sans, strings.TrimPrefix(dns, "*."))
 	}

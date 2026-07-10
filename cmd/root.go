@@ -93,7 +93,7 @@ func hasModule(name string) bool {
 
 // runScan is the top-level scan orchestrator.  It runs each enabled module
 // in sequence, passes results between phases, and returns the final report.
-func runScan(cmd *cobra.Command, args []string) error {
+func runScan(_ *cobra.Command, args []string) error {
 	target := strings.ToLower(strings.TrimSpace(args[0]))
 	target = strings.TrimPrefix(target, "https://")
 	target = strings.TrimPrefix(target, "http://")

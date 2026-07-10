@@ -27,7 +27,7 @@ func fetchPage(url string, timeout int, stealth bool) (string, error) {
 			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 			DisableKeepAlives: true,
 		},
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		CheckRedirect: func(_ *http.Request, via []*http.Request) error {
 			if len(via) >= 3 {
 				return http.ErrUseLastResponse
 			}
@@ -63,8 +63,9 @@ func fetchPage(url string, timeout int, stealth bool) (string, error) {
 
 func extractEmails(body string) []string {
 	seen := map[string]bool{}
-	var results []string
-	for _, match := range emailPattern.FindAllString(body, -1) {
+	matches := emailPattern.FindAllString(body, -1)
+	results := make([]string, 0, len(matches))
+	for _, match := range matches {
 		email := strings.ToLower(strings.TrimSpace(match))
 		if seen[email] {
 			continue
@@ -81,8 +82,9 @@ func extractEmails(body string) []string {
 
 func extractPhones(body string) []string {
 	seen := map[string]bool{}
-	var results []string
-	for _, match := range phonePattern.FindAllString(body, -1) {
+	matches := phonePattern.FindAllString(body, -1)
+	results := make([]string, 0, len(matches))
+	for _, match := range matches {
 		phone := strings.TrimSpace(match)
 		if len(phone) < 7 || isNumericOnly(phone) || len(phone) > 20 {
 			continue
@@ -101,8 +103,7 @@ func extractPhones(body string) []string {
 
 func extractEmployeeNames(body string) []string {
 	seen := map[string]bool{}
-	var results []string
-
+	results := make([]string, 0)
 	// Remove HTML tags to get clean text
 	text := stripHTML(body)
 

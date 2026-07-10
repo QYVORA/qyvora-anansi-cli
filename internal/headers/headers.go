@@ -150,7 +150,7 @@ func auditURL(url string, timeout int, stealth bool) *output.HeaderResult {
 }
 
 // Run audits security headers for all live probe results concurrently.
-func Run(probeResults []output.ProbeResult, liveHosts []output.ProbeResult, timeout int, threads int, delayMs int, stealth bool) []output.HeaderResult {
+func Run(_ []output.ProbeResult, liveHosts []output.ProbeResult, timeout int, threads int, delayMs int, stealth bool) []output.HeaderResult {
 	results := make([]output.HeaderResult, 0, len(liveHosts))
 	var mu sync.Mutex
 	sem := make(chan struct{}, threads)

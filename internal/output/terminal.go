@@ -86,7 +86,7 @@ func (r *Renderer) Banner(target string) {
 	fmt.Println()
 }
 
-func (r *Renderer) PhaseHeader(num, name, desc string) {
+func (r *Renderer) PhaseHeader(num, name, _ string) {
 	if r.isQuiet() {
 		return
 	}
@@ -212,8 +212,8 @@ func (r *Renderer) ProbeTable(results []ProbeResult) {
 	dim.Printf("  live: %d / %d\n\n", live, len(results))
 
 	for _, p := range displayResults {
-		codeStr := "—"
-		codeColor := dim.Sprint(codeStr)
+		var codeStr string
+		var codeColor string
 		if p.IsAlive {
 			codeStr = fmt.Sprintf("%d", p.StatusCode)
 			codeColor = greenDim.Sprint(codeStr)
@@ -233,15 +233,6 @@ func (r *Renderer) ProbeTable(results []ProbeResult) {
 		if len(p.Technologies) > 0 {
 			server = fmt.Sprintf("%s [%s]", server, strings.Join(p.Technologies, ", "))
 		}
-		title := p.Title
-		if title == "" {
-			title = "—"
-		}
-
-		if len(title) > 40 {
-			title = title[:37] + "..."
-		}
-
 		url := p.URL
 		if url == "" {
 			url = p.FQDN
@@ -277,11 +268,6 @@ func (r *Renderer) TLSTable(results []TLSResult) {
 			expiryColor = orange.Sprint(expiryStr)
 		}
 
-		issuer := t.Issuer
-		if issuer == "" {
-			issuer = "unknown"
-		}
-
 		selfSignedFlag := ""
 		if t.SelfSigned {
 			selfSignedFlag = red.Sprint(" self-signed")
@@ -309,12 +295,9 @@ func (r *Renderer) HeadersTable(results []HeaderResult) {
 			continue
 		}
 
-		present := []string{}
 		missing := []string{}
 		for _, h := range []string{"strict-transport-security", "content-security-policy", "x-frame-options", "x-content-type-options", "referrer-policy", "permissions-policy"} {
-			if val, ok := hr.Headers[h]; ok && val != "" {
-				present = append(present, shortName(h))
-			} else {
+			if val, ok := hr.Headers[h]; !ok || val == "" {
 				missing = append(missing, shortName(h))
 			}
 		}
@@ -556,21 +539,6 @@ func shortName(header string) string {
 		return v
 	}
 	return header
-}
-
-func severityColor(sev string) func(string, ...interface{}) string {
-	switch sev {
-	case Critical:
-		return red.Sprintf
-	case High:
-		return orange.Sprintf
-	case Medium:
-		return color.New(color.FgYellow).Sprintf
-	case Low:
-		return dim.Sprintf
-	default:
-		return dim.Sprintf
-	}
 }
 
 func computeRisk(counts map[string]int) int {

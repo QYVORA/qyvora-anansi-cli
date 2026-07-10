@@ -8,7 +8,7 @@ import (
 	"github.com/QYVORA/qyvora-anansi-cli/internal/output"
 )
 
-func Run(out *output.Renderer, probeResults []output.ProbeResult, target string, timeout int, threads int, delayMs int, stealth bool) []output.OSINTResult {
+func Run(out *output.Renderer, probeResults []output.ProbeResult, target string, timeout int, threads int, _ int, stealth bool) []output.OSINTResult {
 	var results []output.OSINTResult
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -83,7 +83,7 @@ func Run(out *output.Renderer, probeResults []output.ProbeResult, target string,
 
 func extractRelevantPages(probeResults []output.ProbeResult) []string {
 	seen := map[string]bool{}
-	var urls []string
+	urls := make([]string, 0, len(probeResults))
 	for _, p := range probeResults {
 		if !p.IsAlive || p.URL == "" || seen[p.URL] {
 			continue

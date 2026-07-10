@@ -45,7 +45,7 @@ func whoisLookup(domain string) (whoisContact, []output.OSINTResult) {
 	// Any data exchanged — including emails, phone numbers, and org names —
 	// is visible to network observers. Do not run WHOIS lookups over
 	// untrusted networks if the results are sensitive.
-	var results []output.OSINTResult
+	results := make([]output.OSINTResult, 0)
 
 	server := resolveWhoisServer(domain)
 	if server == "" {
