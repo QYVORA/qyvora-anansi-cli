@@ -41,9 +41,15 @@ type resolveJob struct {
 // certificates matching "%.target.com" and returns deduplicated DNS names.
 // A doubled timeout is used because crt.sh can be slow.
 func fetchCrtSh(target string, timeout int) ([]string, error) {
-	client := &http.Client{Timeout: time.Duration(timeout*2) * time.Second}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout*2)*time.Second)
+	defer cancel()
+	client := &http.Client{}
 	url := fmt.Sprintf("https://crt.sh/?q=%%25.%s&output=json", target)
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

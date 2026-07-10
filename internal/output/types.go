@@ -142,14 +142,6 @@ var randomUserAgents = []string{
 	"Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
 }
 
-// StealthConfig holds settings that reduce the scan's detectability.
-// When Stealth is enabled the tool randomises User-Agents, adds jitter
-// to inter-request delays, skips crt.sh queries (which are logged by CT),
-// and limits concurrency to a smaller pool.
-type StealthConfig struct {
-	Enabled bool
-}
-
 // RandomUA returns a random User-Agent string from the built-in pool.
 func RandomUA() string {
 	return randomUserAgents[rand.Intn(len(randomUserAgents))]

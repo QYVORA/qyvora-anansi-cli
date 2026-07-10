@@ -1,6 +1,7 @@
 package osint
 
 import (
+	"context"
 	"crypto/tls"
 	"io"
 	"net/http"
@@ -34,7 +35,7 @@ func fetchPage(url string, timeout int, stealth bool) (string, error) {
 		},
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
 	if err != nil {
 		return "", err
 	}

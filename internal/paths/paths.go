@@ -5,6 +5,7 @@
 package paths
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -51,7 +52,7 @@ type baselineResponse struct {
 
 func getBaseline(client *http.Client, baseURL string) baselineResponse {
 	target := strings.TrimRight(baseURL, "/") + fmt.Sprintf("/anansi-404-test-%d", time.Now().UnixNano())
-	req, err := http.NewRequest("GET", target, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", target, nil)
 	if err != nil {
 		return baselineResponse{statusCode: 404}
 	}
@@ -72,7 +73,7 @@ func getBaseline(client *http.Client, baseURL string) baselineResponse {
 
 func (r pathRule) checkPath(client *http.Client, baseURL string, baseline baselineResponse, stealth bool) *output.Finding {
 	target := strings.TrimRight(baseURL, "/") + r.path
-	req, err := http.NewRequest("GET", target, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", target, nil)
 	if err != nil {
 		return nil
 	}
@@ -108,7 +109,7 @@ func (r pathRule) checkPath(client *http.Client, baseURL string, baseline baseli
 			Timeout:   client.Timeout,
 			Transport: client.Transport,
 		}
-		fReq, fErr := http.NewRequest("GET", target, nil)
+		fReq, fErr := http.NewRequestWithContext(context.Background(), "GET", target, nil)
 		if fErr == nil {
 			fReq.Header.Set("User-Agent", output.DefaultUA)
 			fResp, fRespErr := followClient.Do(fReq)

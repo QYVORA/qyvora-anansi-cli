@@ -134,7 +134,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 	go func() {
 		<-ctx.Done()
 		report.Duration = time.Since(startTime)
-		report.Target = target
 		out.Banner(target)
 		out.Info("Scan interrupted by user. Printing partial results...")
 		out.Summary(report)
@@ -229,7 +228,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("creating output file: %w", err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		oldStdout := os.Stdout
 		os.Stdout = f
 		out.Summary(report)

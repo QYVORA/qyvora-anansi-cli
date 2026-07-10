@@ -4,6 +4,7 @@
 package probe
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -52,7 +53,7 @@ func newClient(timeoutSec int) *http.Client {
 // response: status code, headers, page title, server info, response time,
 // and detected technologies.  Returns nil on transport error.
 func probeURL(client *http.Client, url string, stealth bool) *output.ProbeResult {
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
 	if err != nil {
 		return nil
 	}

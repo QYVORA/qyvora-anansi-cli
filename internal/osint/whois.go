@@ -182,9 +182,9 @@ func queryWhois(server, query string) (string, error) {
 	}
 	defer conn.Close()
 
-	conn.SetDeadline(time.Now().Add(15 * time.Second))
+	_ = conn.SetDeadline(time.Now().Add(15 * time.Second))
 
-	fmt.Fprintf(conn, "%s\r\n", query)
+	_, _ = fmt.Fprintf(conn, "%s\r\n", query)
 
 	var lines []string
 	scanner := bufio.NewScanner(conn)

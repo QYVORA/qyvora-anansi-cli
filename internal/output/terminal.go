@@ -30,10 +30,9 @@ var (
 // Renderer manages output formatting and verbosity.  It is created once per
 // scan and passed to every module so they can display progress inline.
 type Renderer struct {
-	format   string
-	verbose  bool
-	stealth  bool
-	filePath string
+	format  string
+	verbose bool
+	stealth bool
 }
 
 // New creates a Renderer for the given format and verbosity setting.
@@ -47,12 +46,6 @@ func New(format string, verbose bool) *Renderer {
 // WithStealth returns a copy of the Renderer with stealth mode enabled.
 func (r *Renderer) WithStealth() *Renderer {
 	r.stealth = true
-	return r
-}
-
-// WithOutputFile sets a file path for writing the final report.
-func (r *Renderer) WithOutputFile(path string) *Renderer {
-	r.filePath = path
 	return r
 }
 
@@ -195,7 +188,7 @@ func (r *Renderer) SubdomainTable(results []SubdomainResult) {
 			fmt.Fprintf(w, "  \tCNAME → %s\t\t\n", dim.Sprint(cname))
 		}
 	}
-	w.Flush()
+	_ = w.Flush()
 	fmt.Println()
 }
 
@@ -439,7 +432,9 @@ func (r *Renderer) Summary(report *Report) {
 	if r.format == "json" {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		enc.Encode(report)
+		if err := enc.Encode(report); err != nil {
+			fmt.Fprintf(os.Stderr, "Error encoding JSON: %s\n", err)
+		}
 		return
 	}
 

@@ -5,6 +5,7 @@
 package headers
 
 import (
+	"context"
 	"crypto/tls"
 	"io"
 	"net/http"
@@ -61,7 +62,7 @@ func auditURL(url string, timeout int, stealth bool) *output.HeaderResult {
 		},
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
 	if err != nil {
 		return &output.HeaderResult{
 			URL:     url,
@@ -87,7 +88,7 @@ func auditURL(url string, timeout int, stealth bool) *output.HeaderResult {
 	}
 	// Drain and close body to allow connection reuse; limit read to 4K
 	_, _ = io.CopyN(io.Discard, resp.Body, 4096)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	hmap := map[string]string{}
 	for _, h := range securityHeaders {

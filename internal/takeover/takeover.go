@@ -5,6 +5,7 @@
 package takeover
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -55,7 +56,7 @@ func checkTakeover(client *http.Client, subdomain string, deadCNAMEs []string, s
 				continue
 			}
 
-			req, err := http.NewRequest("GET", "http://"+subdomain, nil)
+			req, err := http.NewRequestWithContext(context.Background(), "GET", "http://"+subdomain, nil)
 			if err != nil {
 				continue
 			}
@@ -67,7 +68,7 @@ func checkTakeover(client *http.Client, subdomain string, deadCNAMEs []string, s
 
 			resp, err := client.Do(req)
 			if err != nil {
-				req, _ = http.NewRequest("GET", "https://"+subdomain, nil)
+				req, _ = http.NewRequestWithContext(context.Background(), "GET", "https://"+subdomain, nil)
 				if stealth {
 					req.Header.Set("User-Agent", output.RandomUA())
 				} else {
@@ -79,7 +80,7 @@ func checkTakeover(client *http.Client, subdomain string, deadCNAMEs []string, s
 				}
 			}
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if strings.Contains(strings.ToLower(string(body)), strings.ToLower(fp.bodyMatch)) {
 				return &output.Finding{
