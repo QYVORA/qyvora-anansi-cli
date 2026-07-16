@@ -51,7 +51,6 @@ var rootCmd = &cobra.Command{
   ` + output.CompanyURL + `
   Built in ` + output.BuiltIn + `
 `,
-	Args: cobra.ExactArgs(1),
 	RunE: runScan,
 }
 
@@ -93,7 +92,10 @@ func hasModule(name string) bool {
 
 // runScan is the top-level scan orchestrator.  It runs each enabled module
 // in sequence, passes results between phases, and returns the final report.
-func runScan(_ *cobra.Command, args []string) error {
+func runScan(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return cmd.Help()
+	}
 	target := strings.ToLower(strings.TrimSpace(args[0]))
 	target = strings.TrimPrefix(target, "https://")
 	target = strings.TrimPrefix(target, "http://")
