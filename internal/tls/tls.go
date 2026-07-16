@@ -5,6 +5,7 @@
 package tls
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -21,12 +22,18 @@ import (
 // analysed.
 func probeHost(hostname string, timeout int) (*output.TLSResult, error) {
 	dialer := &net.Dialer{Timeout: time.Duration(timeout) * time.Second}
-	conn, err := tls.DialWithDialer(dialer, "tcp", hostname+":443", &tls.Config{
+	tlsDialer := &tls.Dialer{NetDialer: dialer, Config: &tls.Config{
 		InsecureSkipVerify: true,
 		ServerName:         hostname,
-	})
+	}}
+	rawConn, err := tlsDialer.DialContext(context.Background(), "tcp", hostname+":443")
 	if err != nil {
 		return nil, err
+	}
+	conn, ok := rawConn.(*tls.Conn)
+	if !ok {
+		_ = rawConn.Close()
+		return nil, fmt.Errorf("unexpected connection type %T", rawConn)
 	}
 	defer conn.Close()
 
@@ -197,7 +204,7 @@ func Run(liveProbes []output.ProbeResult, targetDomain string, timeout int, thre
 				continue
 			}
 			seen[san] = struct{}{}
-			ips, _ := net.LookupHost(san)
+			ips, _ := net.DefaultResolver.LookupHost(context.Background(), san)
 			newSubdomains = append(newSubdomains, output.SubdomainResult{
 				FQDN:     san,
 				Source:   output.SourceSAN,

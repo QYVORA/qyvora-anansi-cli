@@ -2,6 +2,7 @@ package osint
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net"
 	"regexp"
@@ -176,7 +177,7 @@ func extractFirstMatch(re *regexp.Regexp, text string) string {
 }
 
 func queryWhois(server, query string) (string, error) {
-	conn, err := net.DialTimeout("tcp", server+":43", 10*time.Second)
+	conn, err := (&net.Dialer{Timeout: 10 * time.Second}).DialContext(context.Background(), "tcp", server+":43")
 	if err != nil {
 		return "", err
 	}

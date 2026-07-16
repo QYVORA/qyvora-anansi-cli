@@ -174,11 +174,12 @@ func (r *Renderer) SubdomainTable(results []SubdomainResult) {
 		}
 
 		sourceColor := dim.Sprint(s.Source)
-		if s.Source == "crtsh" {
+		switch s.Source {
+		case "crtsh":
 			sourceColor = accentDim.Sprint("crt.sh")
-		} else if s.Source == "san" {
+		case "san":
 			sourceColor = greenDim.Sprint("san")
-		} else if s.Source == "mutation" {
+		case "mutation":
 			sourceColor = orange.Sprint("mutate")
 		}
 

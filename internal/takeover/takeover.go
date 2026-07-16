@@ -98,12 +98,14 @@ func checkTakeover(client *http.Client, subdomain string, deadCNAMEs []string, s
 }
 
 func resolveCNAMEs(fqdn string) []string {
-	cname, err := net.LookupCNAME(fqdn)
+	ctx := context.Background()
+	resolver := net.DefaultResolver
+	cname, err := resolver.LookupCNAME(ctx, fqdn)
 	if err != nil || cname == fqdn+"." {
 		return nil
 	}
 	cname = strings.TrimSuffix(cname, ".")
-	if _, err := net.LookupHost(cname); err == nil {
+	if _, err := resolver.LookupHost(ctx, cname); err == nil {
 		return nil
 	}
 	return []string{cname}
