@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 3m
   tests: true
@@ -15,11 +17,10 @@ linters:
     - bodyclose
     - noctx
     - prealloc
-
-linters-settings:
-  revive:
-    rules:
-      - name: exported
-        severity: warning
-      - name: unused-parameter
-        severity: warning
+  settings:
+    revive:
+      rules:
+        - name: exported
+          severity: warning
+        - name: unused-parameter
+          severity: warning
