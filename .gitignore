@@ -2,6 +2,9 @@
 anansi
 anansi.exe
 
+# AI session files
+continue_AI.md
+
 # Pre-built release binaries
 releases/
 
